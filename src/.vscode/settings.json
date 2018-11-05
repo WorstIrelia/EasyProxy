@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "auto_match.h": "c",
+        "packet.h": "c"
+    }
+}
