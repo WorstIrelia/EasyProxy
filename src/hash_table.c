@@ -76,10 +76,10 @@ static void rehash(Hash_table *hash){
         }
     }
     List *list = (List*)malloc(sizeof(List) * new_cap);
+    assert(list);
     for(int i = 0; i < new_cap; i++){
         list_init(list + i);
     }
-    assert(list);
     for(int i = 0; i < hash->cap; i++){
         List *ptr = hash->list + i;
         while(ptr->head){
@@ -148,7 +148,6 @@ void hash_table_pri(Hash_table *hash, void (*pri)(void *key, void *value)){
 
 void insert(Hash_table *hash, void *key, void *value){
     if(_lookup(hash, key)) {
-        // printf("???\n");
         return ;
     }
     _insert(hash, hash_table_node_init(key, hash->key_n, value, hash->value_n));

@@ -6,7 +6,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
-
+#include <errno.h>
 int hostname2ip(char * hostname);
 int connect2server(unsigned int ip, short port);
 #endif

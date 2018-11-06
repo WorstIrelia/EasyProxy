@@ -1,6 +1,6 @@
 #ifndef _CONFIG_H_
 #define _CONFIG_H_
 
-#define BUFSIZE 1024
+#define BUFSIZE 4096
 
 #endif

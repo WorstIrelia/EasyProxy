@@ -23,9 +23,17 @@ int connect2server(unsigned int ip, short port){
     addr.sin_family = AF_INET;
     addr.sin_port = port;
     addr.sin_addr.s_addr = ip;
-    if(connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0){
-        close(fd);
-        return -1;
+    int oldOption = fcntl(fd, F_GETFL);
+    int newOption = oldOption | O_NONBLOCK;
+    fcntl(fd, F_SETFL, newOption);
+    int ret;
+    if((ret = connect(fd, (struct sockaddr*)&addr, sizeof(addr))) < 0){
+        if(errno != EINPROGRESS){
+            close(fd);
+            return -1;
+        }
+        
     }
+    fcntl(fd, F_SETFL, oldOption);
     return fd;
 }

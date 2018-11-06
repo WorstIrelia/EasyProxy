@@ -10,7 +10,7 @@ static Packet *get_packet(int fd, int flag){
     if(packet == NULL){
         packet = (Packet *)malloc(sizeof(Packet));
         assert(packet);
-        if(flag == 1)
+        if(flag == SERVER)
             packet_init(packet, SERVER);
         else 
             packet_init(packet, CLIENT);
@@ -35,7 +35,7 @@ void info_init(Info *ptr){
     ptr->chunked_size = 0;
 }
 
-void packet_init(Packet *packet, Client_server_flag flag){
+void packet_init(Packet *packet, Fd_type flag){
     packet->buf = (char*)malloc(BUFSIZE);
     assert(packet->buf);
     packet->cap = BUFSIZE;
@@ -48,16 +48,34 @@ void packet_init(Packet *packet, Client_server_flag flag){
     // packet->info.chunked_size = 0;
     info_init(&packet->info);
 }
+void packet_destory(Packet *packet){
+    free(packet->buf);
+}
 
 
 int read_packet(int fd, int epollfd){
     int n = read(fd, buf, sizeof(buf));
-    
     if(n <= 0)
         return n;
-    Packet *packet = get_packet(fd, get_fd_type(fd));//
+    assert(get_fd_type(fd) != -1);
+    Packet *packet = get_packet(fd, get_fd_type(fd) & 0x1);//
     if(copy_and_deal_packet(fd, packet, buf, n) < 0){
         return -1;
+    }
+    if(packet->buf_type == DATA_BODY && get_fd(fd) == -1 && (get_fd_type(fd) & 0x1) == CLIENT){
+        assert(packet->info.ip);
+        assert(packet->info.port);
+        int serverfd = connection_create(fd, packet->info.ip, packet->info.port);
+        if(serverfd < 0){
+            return -1;
+        } 
+        // assert(!epoll_add(epollfd, fd, EPOLLOUT | EPOLLERR));
+        set_fd_type(serverfd, SERVER);
+    }
+    int destfd = get_fd(fd);
+    if((get_fd_type(destfd) & 0x2) != IN_EPOLL){
+        assert(!epoll_add(epollfd, destfd, EPOLLOUT | EPOLLERR));
+        set_fd_type(destfd, get_fd_type(destfd) | IN_EPOLL);
     }
     return n;
 }
@@ -80,11 +98,6 @@ static int _send(int fd, Packet *packet){
                 }
                 n += tmp;
             }
-            
-        }
-        else{
-            
-            // epoll_add;
         }
     }
     else{
@@ -94,50 +107,68 @@ static int _send(int fd, Packet *packet){
         }
         packet->l += n;
         packet->size -= n;
-        if(packet->l != packet->r){
-            //epoll_add
-        }
     }
     return n;
 }
+
+static void _reinit_packet(Packet *packet){
+    packet->buf_type = REQUEST_HEAD;
+    packet->state = 0;
+    packet->com_flag = NOT_COMPLETE;
+    packet->info.length = -1;
+    packet->info.chunked_size = 0;
+}
 int send_packet(int fd, int epollfd){
-    //printf("%d %d\n", fd, get_fd(fd));
-
-    Packet *packet = get_packet(fd, get_fd_type(fd));
+    int srcfd = get_fd(fd);
+    assert(srcfd >= 0);
+    assert(get_fd_type(srcfd) >= 0);
+    Packet *packet = get_packet(srcfd, get_fd_type(srcfd) & 0x1) ;
     int n;
-    if(packet->buf_type != DATA_BODY){
-        return 0;
-    }
-    if(get_fd(fd) == -1 && get_fd_type(fd) == -1){
-        assert(packet->info.ip != 0);
-        assert(packet->info.port != 0);
-        int serverfd = connection_create(fd, packet->info.ip, packet->info.port);
-        if(serverfd < 0){
-            return serverfd;
-        }
-        epoll_add(epollfd, serverfd, EPOLLIN | EPOLLERR);
-    }
-    n = _send(get_fd(fd), packet);
-    
-    if(packet->size == 0 && packet->com_flag == COMPLETE && packet->client_server_flag == SERVER){
-        int client_fd = get_fd(fd);
-        Packet *client_packet = get_packet(client_fd, get_fd_type(client_fd));
-        printf("client_fd = %d, server_fd = %d",client_fd, fd);
-        struct in_addr addr;
-        memcpy(&addr, &client_packet->info.ip, sizeof(addr));
-        printf(" ip == %s\n",inet_ntoa(addr));
-        connection_release(fd, client_packet->info.ip, client_packet->info.port);
-    }
+    n = _send(fd, packet);
     if(packet->size == 0 && packet->com_flag == COMPLETE){
-        packet->buf_type = REQUEST_HEAD;
-        packet->state = 0;
-        packet->com_flag = NOT_COMPLETE;
-        packet->info.length = -1;
-        packet->info.chunked_size = 0;
+        assert(!epoll_del(epollfd, srcfd, EPOLLIN | EPOLLERR));
+        assert(!epoll_mod(epollfd, fd, EPOLLIN | EPOLLERR));
+        set_fd_type(srcfd, get_fd_type(srcfd) & 0x1);
+        _reinit_packet(packet);
+        if(packet->client_server_flag == SERVER){
+            Packet *clientpacket = get_packet(fd, get_fd_type(fd) & 0x1);
+            connection_release(srcfd, clientpacket->info.ip, clientpacket->info.port);
+        }
     }
-    
-    // 这里递归可能删除两次 小心怎么处理比较好
-
+    else if(packet->size == 0){
+        assert(epoll_del(epollfd, fd, EPOLLOUT | EPOLLERR) == 0);
+        set_fd_type(fd, get_fd_type(fd) & 0x1);
+    }
     return n;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // n = _send(get_fd(fd), packet);
+    
+    // if(packet->size == 0 && packet->com_flag == COMPLETE && packet->client_server_flag == SERVER){
+    //     int client_fd = get_fd(fd);
+    //     Packet *client_packet = get_packet(client_fd, get_fd_type(client_fd));
+    //     printf("client_fd = %d, server_fd = %d",client_fd, fd);
+    //     struct in_addr addr;
+    //     memcpy(&addr, &client_packet->info.ip, sizeof(addr));
+    //     printf(" ip == %s\n",inet_ntoa(addr));
+    //     connection_release(fd, client_packet->info.ip, client_packet->info.port);
+    // }
+    // if(packet->size == 0 && packet->com_flag == COMPLETE){
+        
+    // }
+  
 
 }

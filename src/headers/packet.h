@@ -18,10 +18,10 @@ typedef enum complete{
     NOT_COMPLETE
 }Complete;
 
-typedef enum client_server_flag{
-    CLIENT,
-    SERVER
-}Client_server_flag;
+// typedef enum client_server_flag{
+//     CLIENT,
+//     SERVER
+// }Client_server_flag;
 
 typedef enum packet_type{
     UNKNOW,
@@ -45,7 +45,7 @@ typedef struct packet{
     size_t size;
     int l,r;
     int state;
-    Client_server_flag client_server_flag;
+    Fd_type client_server_flag;
     Head_body buf_type;
     Info info;
     Complete com_flag;
@@ -55,7 +55,8 @@ typedef struct packet{
 
 int read_packet(int fd, int epollfd);
 int send_packet(int fd, int epollfd);
-void packet_init(Packet *packet, Client_server_flag flag);
+void packet_init(Packet *packet, Fd_type flag);
+void packet_destory(Packet *packet);
 void info_init(Info *ptr);
 
 #endif

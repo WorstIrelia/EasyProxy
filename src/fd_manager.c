@@ -48,19 +48,25 @@ static _List_node* _get_fd_from_ip_port(_Ip_port *ip_port){
 }
 
 static void _client_destory(int fd, int epollfd){
-    assert(get_fd_type(fd) == -1);
+    assert((get_fd_type(fd) & 0x1) == 0);
     void *ptr = get_packet_ptr(fd);
     if(ptr) {
         del_packet_ptr(fd);  //_fd2packet
+        packet_destory(ptr);
         free(ptr);
     }
-    epoll_del(epollfd, fd, EPOLLIN | EPOLLERR);
+    if((get_fd_type(fd) & 0x2) == IN_EPOLL){
+        assert(!epoll_del(epollfd, fd, EPOLLIN | EPOLLERR));
+    }
+    del_fd_type(fd);
+    assert(fd >= 0);
     close(fd);
 }
 
 
 static void _single_close(int fd, int epoll_fd){
-    int type = get_fd_type(fd);
+    assert(get_fd_type(fd) != -1);
+    int type = get_fd_type(fd) & 0x1;
     if(type == SERVER){
         _server_destory(fd, epoll_fd);
     }
@@ -78,11 +84,12 @@ static void _connection_close(int client_fd, int server_fd, int epoll_fd){
 
 
 static void _server_destory(int fd, int epollfd){
-    del_fd_type(fd);
+    
     void *ptr = get_packet_ptr(fd);
     if(ptr) {
         del_packet_ptr(fd);  //_fd2packet
-        free(ptr);
+        packet_destory(ptr);
+        free(ptr);//?????
     }
     ptr = get_ipport_ptr(fd);
     if(ptr){
@@ -100,8 +107,13 @@ static void _server_destory(int fd, int epollfd){
         del_ipport_ptr(fd);
         free(ptr);
     }
-    epoll_del(epollfd, fd, EPOLLIN | EPOLLERR);
+    if((get_fd_type(fd) & 0x2) == IN_EPOLL){
+        assert(!epoll_del(epollfd, fd, EPOLLIN | EPOLLERR));
+    }
+    del_fd_type(fd);
+    assert(fd >= 0);
     close(fd); //del fd;
+    
 }
 
 void fd_manager_init(){
@@ -122,19 +134,19 @@ int get_fd(int fd){
 }
 int get_fd_type(int fd){
     void *ptr = (void *)lookup(&_fd2type, &fd);
-    if(ptr == NULL)
+    if(ptr == NULL){
         return -1;
-    else 
-        return *(int*)ptr;
+    }
+    return *(int*)ptr;
 
 }
-void set_fd_type(int fd){
-    int on = 1;
-    assert(get_fd_type(fd) == -1);
-    insert(&_fd2type, &fd, &on);
+void set_fd_type(int fd, int type){
+    int on = type;
+    // assert(get_fd_type(fd) == -1);
+    change(&_fd2type, &fd, &on);
 }
 void del_fd_type(int fd){
-    assert(get_fd_type(fd) == 1);
+    assert(get_fd_type(fd) >= 0);
     del(&_fd2type, &fd);
 }
 
@@ -180,19 +192,21 @@ void del_ipport_ptr(int fd){
 
 
 void connection_close(int fd, int epoll_fd){
+    assert(fd >= 0);
     int match_fd = get_fd(fd);
     
     if(match_fd == -1){
         _single_close(fd, epoll_fd);
     }
-    else
-        if(get_fd_type(fd) == SERVER){
+    else{
+        if((get_fd_type(fd) & 0x1)== SERVER){
             int tmp = match_fd;
             match_fd = fd;
             fd = tmp;
             // match_fd ^= fd ^= match_fd ^= fd;//swap
         }
         _connection_close(fd, match_fd, epoll_fd);
+    }
 }
 
 
@@ -208,7 +222,6 @@ int connection_create(int fd, unsigned int ip, short port){
         if(serverfd < 0){
             return serverfd;
         }
-        set_fd_type(serverfd);
     }
     else{
         serverfd = ptr->fd;
@@ -250,7 +263,7 @@ int connection_release(int serverfd, unsigned int ip, short port){
     assert(ipport_ptr);
     memcpy(ipport_ptr, &tmp_ipport, sizeof(tmp_ipport));
     insert(&_fd2ipport_ptr, &serverfd, &ipport_ptr);
-
+    del_fd_type(serverfd);
     return 0;
 }
 
