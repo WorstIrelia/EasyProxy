@@ -193,6 +193,9 @@ void del_ipport_ptr(int fd){
 
 void connection_close(int fd, int epoll_fd){
     assert(fd >= 0);
+    if(get_fd_type(fd) == -1){
+        return ;
+    }
     int match_fd = get_fd(fd);
     
     if(match_fd == -1){

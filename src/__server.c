@@ -27,6 +27,7 @@ static int Accept(int fd, int epollfd){
         return retfd;
     }
     epoll_add(epollfd, retfd, EPOLLIN | EPOLLERR);
+    assert(get_fd_type(retfd) == -1);
     set_fd_type(retfd, CLIENT | IN_EPOLL);
     assert(get_fd_type(retfd) != -1);
     return 0;
@@ -35,6 +36,7 @@ static int Accept(int fd, int epollfd){
 static void init(){
     fd_manager_init();
     signal(SIGPIPE, SIG_IGN);
+    puts("init down");
 }
 int main(int argc, char *argv[]){
     init();
@@ -66,6 +68,10 @@ int main(int argc, char *argv[]){
                 }
             }
             else {
+                if(events[i].events & EPOLLERR){
+                    connection_close(tmpfd, epollfd);
+                    continue;
+                } 
                 if(events[i].events & EPOLLIN){
                     n = read_packet(tmpfd, epollfd);
                     if(n <= 0){
@@ -73,15 +79,12 @@ int main(int argc, char *argv[]){
                     }
                 }
                 if(events[i].events & EPOLLOUT){
-                    if(events[i].events & EPOLLERR){
-                        connection_close(tmpfd, epollfd);
-                        continue;
-                    }
                     n = send_packet(tmpfd, epollfd);
                     if(n < 0){
                         connection_close(tmpfd, epollfd);
                     }
-                }    
+                }
+                   
             }
             
         }

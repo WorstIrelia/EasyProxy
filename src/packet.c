@@ -70,6 +70,7 @@ int read_packet(int fd, int epollfd){
             return -1;
         } 
         // assert(!epoll_add(epollfd, fd, EPOLLOUT | EPOLLERR));
+        assert(get_fd_type(serverfd) == -1);
         set_fd_type(serverfd, SERVER);
     }
     int destfd = get_fd(fd);
@@ -120,6 +121,9 @@ static void _reinit_packet(Packet *packet){
 }
 int send_packet(int fd, int epollfd){
     int srcfd = get_fd(fd);
+    if(srcfd < 0){
+        return -1;
+    }
     assert(srcfd >= 0);
     assert(get_fd_type(srcfd) >= 0);
     Packet *packet = get_packet(srcfd, get_fd_type(srcfd) & 0x1) ;

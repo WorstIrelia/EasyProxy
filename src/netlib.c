@@ -17,6 +17,8 @@ int hostname2ip(char * hostname){
 
 int connect2server(unsigned int ip, short port){
     int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int on = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
     if(fd < 0)
         return fd;
     struct sockaddr_in addr;
