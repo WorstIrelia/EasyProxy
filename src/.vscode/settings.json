@@ -4,6 +4,7 @@
         "packet.h": "c",
         "netlib.h": "c",
         "errno.h": "c",
-        "socket.h": "c"
+        "socket.h": "c",
+        "signal.h": "c"
     }
 }

@@ -26,34 +26,41 @@ static int Accept(int fd, int epollfd){
     if(retfd < 0){
         return retfd;
     }
-    epoll_add(epollfd, retfd, EPOLLIN | EPOLLERR);
+    epoll_add(epollfd, retfd, EPOLLIN);
     assert(get_fd_type(retfd) == -1);
     set_fd_type(retfd, CLIENT | IN_EPOLL);
     assert(get_fd_type(retfd) != -1);
     return 0;
 }
 
+int test = 0;
+void foo(){
+    printf("%d\n", test);
+    test++;
+}
+
 static void init(){
     fd_manager_init();
-    signal(SIGPIPE, SIG_IGN);
+    struct sigaction act, oldact;
+    act.sa_handler = SIG_IGN;
+    sigemptyset(&act.sa_mask);
+    // sigaddset(&act.sa_mask, SIGPIPE);
+    act.sa_flags = SA_NODEFER;
+    sigaction(SIGPIPE, &act, &oldact);
     puts("init down");
 }
 int main(int argc, char *argv[]){
     init();
-    
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
-    int on = 1;
-    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-    struct sockaddr_in addr;
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(8888);
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    bind(fd, (struct sockaddr *)&addr, sizeof(addr));
-    listen(fd, 1024);
+    // fd_manager_init();
 
+    int http_fd = listen_port(8888);
+    assert(http_fd >= 0);
     int epollfd = epoll_create(BUFSIZE);
     assert(epollfd >= 0);
-    epoll_add(epollfd, fd, EPOLLIN);
+    epoll_add(epollfd, http_fd, EPOLLIN);
+
+
+
 
     for(;;){
         int num = epoll_wait(epollfd, events, BUFSIZE, -1);
@@ -62,7 +69,7 @@ int main(int argc, char *argv[]){
             // printf("poll fd = %d\n", tmpfd);
             // printf("events = %d\n", events[i].events);
             int n;
-            if(tmpfd == fd){
+            if(tmpfd == http_fd){
                 if(Accept(tmpfd, epollfd) < 0){
                     return -1;
                 }

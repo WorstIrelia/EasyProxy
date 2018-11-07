@@ -57,7 +57,7 @@ static void content_length(char *buf, Packet *packet, int index){
                 index = 0;
         }
         packet->info.length = _atoi(packet, index);
-        printf("%lu\n",packet->info.length);
+        // printf("%lu\n",packet->info.length);
     }
 }
 
@@ -161,6 +161,13 @@ static int _auto_match_data_body(Packet *packet, char *buf, int n){
     // memcpy(&test, &packet->info.ip, sizeof(test));
     // printf("%s\n", inet_ntoa(test));
     // printf("%d\n", packet->info.port);
+    if(packet->info.packet_type == CONNECT){
+        packet->buf_type = HTTPS;
+        packet->size = 0;
+        packet->r = packet->l;
+        assert(n == 0);
+        return 0;
+    }
     if(packet->info.packet_type == GET){
         packet->com_flag = COMPLETE;
         return 0;
@@ -205,7 +212,7 @@ static void _get_ip_and_port(char **ptr, Packet *packet){//循环队列 整个�
     char *tmp = *ptr;
     // http://
     // puts(tmp);
-    tmp += 7;
+    if(packet->info.packet_type != CONNECT) tmp += 7;
     if(tmp > packet->buf + packet->cap){
         tmp = tmp - packet->cap;
     }
@@ -219,20 +226,21 @@ static void _get_ip_and_port(char **ptr, Packet *packet){//循环队列 整个�
     }
     buf[index] = 0;
     packet->info.ip = hostname2ip(buf);
-    if(*tmp == '/'){
+    if(*tmp == '/' || *tmp == ' '){
         packet->info.port = htons(80);
     }
     else{
+        assert(*tmp == ':');
         index = 0;
         tmp++;
-        while(*tmp != '/') {
+        while(*tmp != '/' && *tmp != ' ') {
             buf[index++] = *tmp++;
             if(tmp == packet->buf + packet->cap){
                 tmp = packet->buf;
             }
         }
         buf[index] = 0;
-        puts(buf);
+        // puts(buf);
         packet->info.port = htons(atoi(buf));
     }
     *ptr = tmp ;
@@ -258,11 +266,9 @@ static int _analyise_head(Packet *packet){
     if(index == 64) return -1;
     type_buf[index] = 0;
     packet->info.packet_type = get_type(type_buf);
-    if(packet->info.packet_type == CONNECT){
-        return -1;
-    }
     if(packet->info.packet_type == UNKNOW){
         puts(buf);
+        return -1;
     }
     char *ptr = packet->buf + i;
     _get_ip_and_port(&ptr, packet);
@@ -343,7 +349,7 @@ static int _auto_match_request_body(Packet *packet, char *buf, int n){
         if(packet->state == 4){
             i++;
             do_copy(packet, buf, i);
-            _pri(packet);
+            // _pri(packet);
             if(_analyise_body(packet) < 0)
                 return -1;
             packet->buf_type = DATA_BODY;
@@ -382,6 +388,49 @@ static int _auto_match_request_head(Packet *packet, char *buf, int n){
     return 0;
 }
 
+static int _auto_match_https(Packet *packet, char *buf, int n){
+    do_copy(packet, buf, n);
+    return n;
+    // char *rsbuf = buf;
+    // int totn = n;
+    // if(packet->info.length == 0){
+    //     assert(packet->state < 3);
+    //     while(packet->state < 3 && n){
+    //         packet->state++;
+    //         n--;
+    //         buf++;
+    //     }
+    // }
+    // if(packet->state == 3 && n){
+    //     packet->info.length = *(unsigned char *)buf;
+    //     packet->state ++;
+    //     buf++;
+    //     n--;
+    // }
+    // if(packet->state == 4 && n){
+    //     packet->info.length = packet->info.length << 8 + *(unsigned char *)buf;
+    //     packet->state ++;
+    //     buf++;
+    //     n--;
+    // }
+    // if(packet->state == 5){
+    //     if(packet->info.length > n){
+    //         packet->info.length -= n;
+    //         buf += n;
+    //     }
+    //     else{
+    //         buf += packet->info.length;
+    //         n -= packet->info.length;
+    //         packet->info.length = 0;
+    //         packet->state = 0;
+    //         packet->com_flag = COMPLETE;
+    //         if(n){
+    //             _auto_match_https(packet, buf, n);
+    //         }
+    //     }
+    // }
+}
+
 int auto_match(Packet *packet, char *buf, int n){
     switch (packet->buf_type){
         case REQUEST_HEAD:
@@ -396,6 +445,11 @@ int auto_match(Packet *packet, char *buf, int n){
             break;
         case DATA_BODY:
             if(_auto_match_data_body(packet, buf, n) < 0){
+                return -1;
+            }
+            break;
+        case HTTPS:
+            if(_auto_match_https(packet, buf, n) < 0){
                 return -1;
             }
             break;

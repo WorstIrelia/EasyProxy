@@ -10,7 +10,8 @@
 typedef enum head_body{
     REQUEST_HEAD,
     REQUEST_BODY,
-    DATA_BODY
+    DATA_BODY,
+    HTTPS
 }Head_body;
 
 typedef enum complete{

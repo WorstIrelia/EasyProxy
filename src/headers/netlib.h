@@ -7,6 +7,11 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <string.h>
+
 int hostname2ip(char * hostname);
-int connect2server(unsigned int ip, short port);
+int connect2server(unsigned int ip, unsigned short port);
+int listen_port(unsigned short port);
 #endif

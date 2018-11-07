@@ -11,7 +11,7 @@ static Hash_table _fd2type;
 
 typedef struct _ip_port{
     unsigned int ip;
-    short port;
+    unsigned short port;
 }_Ip_port;
 typedef struct _list_node{
     Listnode tag;
@@ -213,7 +213,7 @@ void connection_close(int fd, int epoll_fd){
 }
 
 
-int connection_create(int fd, unsigned int ip, short port){
+int connection_create(int fd, unsigned int ip, unsigned short port){
     _Ip_port tmp;
     memset(&tmp, 0, sizeof(tmp));
     tmp.ip = ip;
@@ -240,7 +240,7 @@ int connection_create(int fd, unsigned int ip, short port){
     return serverfd;
 }
 
-int connection_release(int serverfd, unsigned int ip, short port){
+int connection_release(int serverfd, unsigned int ip, unsigned short port){
     int fd = get_fd(serverfd);
     assert(fd >= 0 && get_fd(fd) == serverfd);
     del(&_fd2fd, &serverfd);

@@ -2,9 +2,12 @@
 
 
 static char buf[BUFSIZE];
+const char *response = "HTTP/1.1 200 Connection Established\r\n\r\n";
 
 static int copy_and_deal_packet(int fd, Packet *packet, char *buf, int n);
 static Packet *get_packet(int fd, int flag);
+static void _reinit_packet(Packet *packet);
+
 static Packet *get_packet(int fd, int flag){
     Packet *packet = (Packet*)get_packet_ptr(fd);
     if(packet == NULL){
@@ -52,7 +55,18 @@ void packet_destory(Packet *packet){
     free(packet->buf);
 }
 
-
+static int _do_connect(int fd, int epollfd, Packet *packet){
+    assert(packet->info.ip);
+    assert(packet->info.port);
+    int serverfd = connection_create(fd, packet->info.ip, packet->info.port);
+    if(serverfd < 0){
+        return -1;
+    } 
+        // assert(!epoll_add(epollfd, fd, EPOLLOUT | EPOLLERR));
+    assert(get_fd_type(serverfd) == -1);
+    set_fd_type(serverfd, SERVER);
+    return serverfd;
+}
 int read_packet(int fd, int epollfd){
     int n = read(fd, buf, sizeof(buf));
     if(n <= 0)
@@ -62,21 +76,38 @@ int read_packet(int fd, int epollfd){
     if(copy_and_deal_packet(fd, packet, buf, n) < 0){
         return -1;
     }
-    if(packet->buf_type == DATA_BODY && get_fd(fd) == -1 && (get_fd_type(fd) & 0x1) == CLIENT){
-        assert(packet->info.ip);
-        assert(packet->info.port);
-        int serverfd = connection_create(fd, packet->info.ip, packet->info.port);
+    if(packet->buf_type == HTTPS && get_fd(fd) == -1){
+        int serverfd = _do_connect(fd, epollfd, packet);
         if(serverfd < 0){
             return -1;
-        } 
-        // assert(!epoll_add(epollfd, fd, EPOLLOUT | EPOLLERR));
-        assert(get_fd_type(serverfd) == -1);
-        set_fd_type(serverfd, SERVER);
+        }
+        Packet *serverpacket = get_packet(serverfd, SERVER);
+        serverpacket->buf_type = HTTPS;
+        int n = write(fd, response, strlen(response));
+        if(n < 0 || n != strlen(response)){
+            return -1;
+        }
     }
+    if(packet->buf_type == DATA_BODY && get_fd(fd) == -1 && (get_fd_type(fd) & 0x1) == CLIENT){
+        int serverfd = _do_connect(fd, epollfd, packet);
+        if(serverfd < 0){
+            return -1;
+        }
+    }
+    
     int destfd = get_fd(fd);
+    
     if((get_fd_type(destfd) & 0x2) != IN_EPOLL){
-        assert(!epoll_add(epollfd, destfd, EPOLLOUT | EPOLLERR));
+        if(packet->buf_type == HTTPS){
+            assert(!epoll_add(epollfd, destfd, EPOLLIN | EPOLLOUT));
+        }
+        else{
+            assert(!epoll_add(epollfd, destfd, EPOLLOUT));
+        }
         set_fd_type(destfd, get_fd_type(destfd) | IN_EPOLL);
+    }
+    if(packet->buf_type == HTTPS){
+        assert(!epoll_mod(epollfd, destfd, EPOLLIN | EPOLLOUT));   
     }
     return n;
 }
@@ -112,13 +143,7 @@ static int _send(int fd, Packet *packet){
     return n;
 }
 
-static void _reinit_packet(Packet *packet){
-    packet->buf_type = REQUEST_HEAD;
-    packet->state = 0;
-    packet->com_flag = NOT_COMPLETE;
-    packet->info.length = -1;
-    packet->info.chunked_size = 0;
-}
+
 int send_packet(int fd, int epollfd){
     int srcfd = get_fd(fd);
     if(srcfd < 0){
@@ -129,12 +154,17 @@ int send_packet(int fd, int epollfd){
     Packet *packet = get_packet(srcfd, get_fd_type(srcfd) & 0x1) ;
     int n;
     n = _send(fd, packet);
-    if(packet->size == 0 && packet->com_flag == COMPLETE){
-        assert(!epoll_del(epollfd, srcfd, EPOLLIN | EPOLLERR));
-        assert(!epoll_mod(epollfd, fd, EPOLLIN | EPOLLERR));
+    if(packet->buf_type == HTTPS){
+        if(packet->size == 0){
+            assert(!epoll_mod(epollfd, fd, EPOLLIN));
+        }
+    }
+    else if(packet->size == 0 && packet->com_flag == COMPLETE){
+        assert(!epoll_del(epollfd, srcfd, EPOLLIN));
+        assert(!epoll_mod(epollfd, fd, EPOLLIN));
         set_fd_type(srcfd, get_fd_type(srcfd) & 0x1);
         _reinit_packet(packet);
-        if(packet->client_server_flag == SERVER){
+        if(packet->buf_type != HTTPS && packet->client_server_flag == SERVER){
             Packet *clientpacket = get_packet(fd, get_fd_type(fd) & 0x1);
             connection_release(srcfd, clientpacket->info.ip, clientpacket->info.port);
         }
@@ -144,35 +174,14 @@ int send_packet(int fd, int epollfd){
         set_fd_type(fd, get_fd_type(fd) & 0x1);
     }
     return n;
+}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    // n = _send(get_fd(fd), packet);
-    
-    // if(packet->size == 0 && packet->com_flag == COMPLETE && packet->client_server_flag == SERVER){
-    //     int client_fd = get_fd(fd);
-    //     Packet *client_packet = get_packet(client_fd, get_fd_type(client_fd));
-    //     printf("client_fd = %d, server_fd = %d",client_fd, fd);
-    //     struct in_addr addr;
-    //     memcpy(&addr, &client_packet->info.ip, sizeof(addr));
-    //     printf(" ip == %s\n",inet_ntoa(addr));
-    //     connection_release(fd, client_packet->info.ip, client_packet->info.port);
-    // }
-    // if(packet->size == 0 && packet->com_flag == COMPLETE){
-        
-    // }
-  
-
+static void _reinit_packet(Packet *packet){
+    if(packet->buf_type != HTTPS){
+        packet->buf_type = REQUEST_HEAD;
+    }
+    packet->state = 0;
+    packet->com_flag = NOT_COMPLETE;
+    packet->info.length = -1;
+    packet->info.chunked_size = 0;
 }
