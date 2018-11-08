@@ -2,6 +2,7 @@
 
 
 static char buf[BUFSIZE];
+extern Proxy_type proxy_type;
 
 static void content_length(char *buf, Packet *packet, int index);
 static void extend_packet(Packet *packet);
@@ -143,29 +144,20 @@ static int _auto_match_chunk(Packet *packet, char *buf, int n){//here
             assert(i == n - 1);
             packet->state = 0;
         }
-        // else if(packet->state >= 2){
-        //     packet->state = 2;
-        // } 
     }
     return 0;
 
 }
 
 static int _auto_match_data_body(Packet *packet, char *buf, int n){
-    // for(int i = packet->l; i != packet->r ; i++){
-    //     if(i == packet->cap)
-    //         i = 0;
-    //     putchar(packet->buf[i]);
-    // }
-    // struct in_addr test;
-    // memcpy(&test, &packet->info.ip, sizeof(test));
-    // printf("%s\n", inet_ntoa(test));
-    // printf("%d\n", packet->info.port);
     if(packet->info.packet_type == CONNECT){
         packet->buf_type = HTTPS;
-        packet->size = 0;
-        packet->r = packet->l;
-        assert(n == 0);
+        if((proxy_type == CLIENT2SERVER || proxy_type == PROXY2SERVER)){
+            packet->size = 0;
+            packet->r = packet->l;
+            assert(n == 0);
+        }
+        
         return 0;
     }
     if(packet->info.packet_type == GET){
@@ -208,10 +200,9 @@ static Packet_type get_type(char *buf){
     return UNKNOW;
 }
 
-static void _get_ip_and_port(char **ptr, Packet *packet){//循环队列 整个都是错的
+static void _get_ip_and_port(char **ptr, Packet *packet){
     char *tmp = *ptr;
     // http://
-    // puts(tmp);
     if(packet->info.packet_type != CONNECT) tmp += 7;
     if(tmp > packet->buf + packet->cap){
         tmp = tmp - packet->cap;
@@ -270,6 +261,12 @@ static int _analyise_head(Packet *packet){
         puts(buf);
         return -1;
     }
+    if(proxy_type == CLIENT2PROXY || proxy_type == PROXY2PROXY){
+        packet->info.ip = inet_addr(PROXY_IP);
+        packet->info.port = htons(PROXY_PORT);
+        return 0;
+    }
+
     char *ptr = packet->buf + i;
     _get_ip_and_port(&ptr, packet);
     if(packet->info.ip == 0 || packet->info.port == 0)
@@ -289,10 +286,6 @@ static int _analyise_head(Packet *packet){
     return 0;
 }
 
-// static void match(char *buf, Packet *packet, int index, void (*func)(char *,Packet *, int)){
-//     func(buf, packet, index);
-// }
-
 static int _analyise_body(Packet *packet){
     assert(packet->buf_type == REQUEST_BODY);
     int i = packet->l;
@@ -306,7 +299,6 @@ static int _analyise_body(Packet *packet){
         return -1;
     }
     for(; i != packet->r; ){
-        // printf("%d %d\n", i, packet->r);
         i++;
         if(i == packet->cap) i = 0;
         if(packet->buf[i] == '\r' && packet->buf[i + 1 == packet->cap? 0 : i + 1] == '\n'){
@@ -323,7 +315,6 @@ static int _analyise_body(Packet *packet){
             if(i == packet->cap){
                 i = 0;
             }
-            // match(buf, packet, i + 1, func_array[j]);
         }
         while(i != packet->r && packet->buf[i] != '\n'){
             i++;
@@ -349,7 +340,7 @@ static int _auto_match_request_body(Packet *packet, char *buf, int n){
         if(packet->state == 4){
             i++;
             do_copy(packet, buf, i);
-            // _pri(packet);
+            _pri(packet);
             if(_analyise_body(packet) < 0)
                 return -1;
             packet->buf_type = DATA_BODY;

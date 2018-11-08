@@ -13,7 +13,9 @@ typedef enum fd_type{
     CLIENT =        0X00,
     SERVER =        0X01,
     IN_EPOLL =      0X02,
-    NOT_IN_EPOLL =  0X00
+    NOT_IN_EPOLL =  0X00,
+    CODE =          0X04,
+    NOTCODE =       0X00
 }Fd_type;
 
 void fd_manager_init();
@@ -31,7 +33,6 @@ void connection_close(int fd, int epoll_fd);
 
 int get_fd(int fd);
 int get_fd_type(int fd);
-
 
 
 void set_fd_type(int fd, int type);

@@ -1,7 +1,7 @@
 
 #include "netlib.h"
 int hostname2ip(char * hostname){
-    // printf("hostname = %s\n", hostname);
+    printf("hostname = %s\n", hostname);
     struct hostent *he;
     struct in_addr **addr_list;
     if((he = gethostbyname(hostname)) == NULL){
@@ -9,7 +9,7 @@ int hostname2ip(char * hostname){
     }
     addr_list = (struct in_addr **) he->h_addr_list;
     for(int i = 0; addr_list[i]; i++){
-        // puts(inet_ntoa(*addr_list[i]));
+        puts(inet_ntoa(*addr_list[i]));
         return inet_addr(inet_ntoa(*addr_list[i]));
     }
     return 0;

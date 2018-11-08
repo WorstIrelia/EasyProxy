@@ -1,7 +1,7 @@
 BUILD := ../build
 CC := gcc
 INC := ./headers
-CFLAGS := -I $(INC) -g -Wall
+CFLAGS := -I $(INC) -g -Wall 
 all :	$(BUILD)/netlib.o\
 	$(BUILD)/list.o\
 	$(BUILD)/hash_table.o\
@@ -29,6 +29,6 @@ $(BUILD)/packet.o : packet.c $(INC)/packet.h
 	$(CC) -c packet.c $(CFLAGS) -o $(BUILD)/packet.o
 $(BUILD)/proxy : $(BUILD)/packet.o $(BUILD)/auto_match.o $(BUILD)/fd_manager.o\
 $(BUILD)/hash_table.o $(BUILD)/list.o $(BUILD)/netlib.o $(BUILD)/easy_epoll.o
-	$(CC) __server.c $(BUILD)/packet.o $(BUILD)/auto_match.o $(BUILD)/fd_manager.o $(BUILD)/hash_table.o $(BUILD)/list.o $(BUILD)/netlib.o $(BUILD)/easy_epoll.o $(CFLAGS) -o proxy
+	$(CC) __server.c  $(BUILD)/auto_match.o $(BUILD)/packet.o $(BUILD)/fd_manager.o $(BUILD)/hash_table.o $(BUILD)/list.o $(BUILD)/netlib.o $(BUILD)/easy_epoll.o $(CFLAGS) -o proxy
 clean:
 	rm $(BUILD)/*.o

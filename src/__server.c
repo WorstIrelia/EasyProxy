@@ -14,11 +14,13 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <sys/io.h>
 #include "packet.h"
 #include "fd_manager.h"
 #include "easy_epoll.h"
 static struct epoll_event events[BUFSIZE];
 
+Proxy_type proxy_type;
 
 static int Accept(int fd, int epollfd){
     // printf("%d\n", fd);
@@ -29,17 +31,15 @@ static int Accept(int fd, int epollfd){
     epoll_add(epollfd, retfd, EPOLLIN);
     assert(get_fd_type(retfd) == -1);
     set_fd_type(retfd, CLIENT | IN_EPOLL);
+    if(proxy_type == PROXY2PROXY || proxy_type == PROXY2SERVER){
+        set_fd_type(retfd, get_fd_type(retfd) | CODE);
+    }
     assert(get_fd_type(retfd) != -1);
     return 0;
 }
 
-int test = 0;
-void foo(){
-    printf("%d\n", test);
-    test++;
-}
-
 static void init(){
+    proxy_type = CLIENT2PROXY;
     fd_manager_init();
     struct sigaction act, oldact;
     act.sa_handler = SIG_IGN;
@@ -51,23 +51,17 @@ static void init(){
 }
 int main(int argc, char *argv[]){
     init();
-    // fd_manager_init();
 
-    int http_fd = listen_port(8888);
+    int http_fd = listen_port(LISTENPORT);
     assert(http_fd >= 0);
     int epollfd = epoll_create(BUFSIZE);
     assert(epollfd >= 0);
     epoll_add(epollfd, http_fd, EPOLLIN);
 
-
-
-
     for(;;){
         int num = epoll_wait(epollfd, events, BUFSIZE, -1);
         for(int i = 0; i < num; i++){
             int tmpfd = events[i].data.fd;
-            // printf("poll fd = %d\n", tmpfd);
-            // printf("events = %d\n", events[i].events);
             int n;
             if(tmpfd == http_fd){
                 if(Accept(tmpfd, epollfd) < 0){

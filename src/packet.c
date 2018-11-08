@@ -2,12 +2,20 @@
 
 
 static char buf[BUFSIZE];
+extern Proxy_type proxy_type;
+
 const char *response = "HTTP/1.1 200 Connection Established\r\n\r\n";
 
 static int copy_and_deal_packet(int fd, Packet *packet, char *buf, int n);
 static Packet *get_packet(int fd, int flag);
 static void _reinit_packet(Packet *packet);
+static int __send(int fd, const char *packet_buf, int n);
+static void _de_code(char *buf, int n){
+    for(int i = 0; i < n; i++){
+        buf[i] ^= CODE;
+    }
 
+}
 static Packet *get_packet(int fd, int flag){
     Packet *packet = (Packet*)get_packet_ptr(fd);
     if(packet == NULL){
@@ -51,8 +59,8 @@ void packet_init(Packet *packet, Fd_type flag){
     // packet->info.chunked_size = 0;
     info_init(&packet->info);
 }
-void packet_destory(Packet *packet){
-    free(packet->buf);
+void packet_destory(void *packet){
+    free(((Packet *)packet)->buf);
 }
 
 static int _do_connect(int fd, int epollfd, Packet *packet){
@@ -65,17 +73,26 @@ static int _do_connect(int fd, int epollfd, Packet *packet){
         // assert(!epoll_add(epollfd, fd, EPOLLOUT | EPOLLERR));
     assert(get_fd_type(serverfd) == -1);
     set_fd_type(serverfd, SERVER);
+    if(proxy_type == CLIENT2PROXY || proxy_type == PROXY2PROXY){
+        set_fd_type(serverfd, get_fd_type(serverfd) | CODE);
+    }
     return serverfd;
 }
 int read_packet(int fd, int epollfd){
     int n = read(fd, buf, sizeof(buf));
+    printf("now == %d\n", n);
     if(n <= 0)
         return n;
+    if(get_fd_type(fd) & CODE){
+        _de_code(buf, n);
+    }
     assert(get_fd_type(fd) != -1);
-    Packet *packet = get_packet(fd, get_fd_type(fd) & 0x1);//
+    Packet *packet = get_packet(fd, get_fd_type(fd) & SERVER);//
     if(copy_and_deal_packet(fd, packet, buf, n) < 0){
         return -1;
     }
+    printf("read = %lu\n", packet->size);
+    assert(packet->size != packet->cap);
     if(packet->buf_type == HTTPS && get_fd(fd) == -1){
         int serverfd = _do_connect(fd, epollfd, packet);
         if(serverfd < 0){
@@ -83,12 +100,15 @@ int read_packet(int fd, int epollfd){
         }
         Packet *serverpacket = get_packet(serverfd, SERVER);
         serverpacket->buf_type = HTTPS;
-        int n = write(fd, response, strlen(response));
-        if(n < 0 || n != strlen(response)){
-            return -1;
+        if(proxy_type == CLIENT2SERVER || proxy_type == PROXY2SERVER){
+            int n = __send(fd, response, strlen(response));
+            if(n < 0 || n != strlen(response)){
+                return -1;
+            }   
         }
+        
     }
-    if(packet->buf_type == DATA_BODY && get_fd(fd) == -1 && (get_fd_type(fd) & 0x1) == CLIENT){
+    if(packet->buf_type == DATA_BODY && get_fd(fd) == -1 && (get_fd_type(fd) & SERVER) == CLIENT){
         int serverfd = _do_connect(fd, epollfd, packet);
         if(serverfd < 0){
             return -1;
@@ -97,7 +117,7 @@ int read_packet(int fd, int epollfd){
     
     int destfd = get_fd(fd);
     
-    if((get_fd_type(destfd) & 0x2) != IN_EPOLL){
+    if((get_fd_type(destfd) & IN_EPOLL) != IN_EPOLL){
         if(packet->buf_type == HTTPS){
             assert(!epoll_add(epollfd, destfd, EPOLLIN | EPOLLOUT));
         }
@@ -111,10 +131,26 @@ int read_packet(int fd, int epollfd){
     }
     return n;
 }
+
+static int __send(int fd, const char *packet_buf, int n){
+    if((get_fd_type(fd) & CODE ) == 0){
+        return write(fd, packet_buf, n);
+    }
+    for(int i = 0; i < (n < BUFSIZE? n : BUFSIZE); i++){
+        buf[i] = *packet_buf++;
+        buf[i] ^= CODE;
+    }
+    return write(fd, buf, (n < BUFSIZE? n : BUFSIZE));
+}
 static int _send(int fd, Packet *packet){
+    printf("send %lu\n", packet->size);
+    printf("%d %d\n", packet->l, packet->r);
+    
+    printf("%d\n", packet->buf[packet->l]);
+    assert(packet->size != packet->cap);
     int n;
     if(packet->r < packet->l){
-        n = write(fd, packet->buf + packet->l, packet->cap - packet->l);
+        n = __send(fd, packet->buf + packet->l, packet->cap - packet->l);
         if(n < 0){
             return n;
         }
@@ -133,7 +169,7 @@ static int _send(int fd, Packet *packet){
         }
     }
     else{
-        n = write(fd, packet->buf + packet->l, packet->r - packet->l);
+        n = __send(fd, packet->buf + packet->l, packet->r - packet->l);
         if(n < 0){
             return n;
         }
@@ -162,7 +198,7 @@ int send_packet(int fd, int epollfd){
     else if(packet->size == 0 && packet->com_flag == COMPLETE){
         assert(!epoll_del(epollfd, srcfd, EPOLLIN));
         assert(!epoll_mod(epollfd, fd, EPOLLIN));
-        set_fd_type(srcfd, get_fd_type(srcfd) & 0x1);
+        set_fd_type(srcfd, get_fd_type(srcfd) & (~IN_EPOLL));
         _reinit_packet(packet);
         if(packet->buf_type != HTTPS && packet->client_server_flag == SERVER){
             Packet *clientpacket = get_packet(fd, get_fd_type(fd) & 0x1);
@@ -170,8 +206,8 @@ int send_packet(int fd, int epollfd){
         }
     }
     else if(packet->size == 0){
-        assert(epoll_del(epollfd, fd, EPOLLOUT | EPOLLERR) == 0);
-        set_fd_type(fd, get_fd_type(fd) & 0x1);
+        assert(epoll_del(epollfd, fd, EPOLLOUT) == 0);
+        set_fd_type(fd, get_fd_type(fd) & (~IN_EPOLL));
     }
     return n;
 }

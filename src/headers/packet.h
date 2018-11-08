@@ -33,7 +33,7 @@ typedef enum packet_type{
 
 typedef struct info{
     unsigned int ip;
-    short port;
+    unsigned short port;
     Packet_type packet_type;
     size_t length;
     size_t chunked_size;
@@ -57,7 +57,7 @@ typedef struct packet{
 int read_packet(int fd, int epollfd);
 int send_packet(int fd, int epollfd);
 void packet_init(Packet *packet, Fd_type flag);
-void packet_destory(Packet *packet);
+void packet_destory(void *packet);
 void info_init(Info *ptr);
 
 #endif

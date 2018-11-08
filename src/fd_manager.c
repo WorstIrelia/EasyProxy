@@ -1,7 +1,6 @@
 #include "fd_manager.h"
 
 #define _IP_PORT_PTR(x) ((_Ip_port*)x)
-#define SERVER 1
 static Hash_table _fd2fd;
 static Hash_table _ipport2list;
 static Hash_table _fd2packet_ptr;
@@ -19,6 +18,7 @@ typedef struct _list_node{
 }_List_node;
 
 
+void packet_destory(void *);
 static _List_node* _get_fd_from_ip_port(_Ip_port *ip_port);
 static int _ip_port_cmp(void *lsh, void *rsh);
 static int _fd_cmp(void *lsh, void *rsh);
@@ -84,12 +84,12 @@ static void _connection_close(int client_fd, int server_fd, int epoll_fd){
 
 
 static void _server_destory(int fd, int epollfd){
-    
+    assert((get_fd_type(fd) &SERVER) == SERVER);
     void *ptr = get_packet_ptr(fd);
     if(ptr) {
         del_packet_ptr(fd);  //_fd2packet
         packet_destory(ptr);
-        free(ptr);//?????
+        free(ptr);
     }
     ptr = get_ipport_ptr(fd);
     if(ptr){
@@ -197,12 +197,13 @@ void connection_close(int fd, int epoll_fd){
         return ;
     }
     int match_fd = get_fd(fd);
-    
     if(match_fd == -1){
         _single_close(fd, epoll_fd);
     }
     else{
-        if((get_fd_type(fd) & 0x1)== SERVER){
+        assert(get_fd(match_fd) == fd);
+        if((get_fd_type(fd) & SERVER)== SERVER){
+            assert((get_fd_type(match_fd) & SERVER) == CLIENT);
             int tmp = match_fd;
             match_fd = fd;
             fd = tmp;
