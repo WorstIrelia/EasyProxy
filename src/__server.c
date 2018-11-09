@@ -20,10 +20,14 @@
 #include "easy_epoll.h"
 static struct epoll_event events[BUFSIZE];
 
-Proxy_type proxy_type;
+extern Proxy_type proxy_type;
+extern unsigned short listenport;
+extern char *listenip;
+extern unsigned short proxyport;
+extern char *proxyip;
+extern int init(int ,char *[]);
 
 static int Accept(int fd, int epollfd){
-    // printf("%d\n", fd);
     int retfd = accept(fd, NULL, NULL);
     if(retfd < 0){
         return retfd;
@@ -38,21 +42,12 @@ static int Accept(int fd, int epollfd){
     return 0;
 }
 
-static void init(){
-    proxy_type = CLIENT2PROXY;
-    fd_manager_init();
-    struct sigaction act, oldact;
-    act.sa_handler = SIG_IGN;
-    sigemptyset(&act.sa_mask);
-    // sigaddset(&act.sa_mask, SIGPIPE);
-    act.sa_flags = SA_NODEFER;
-    sigaction(SIGPIPE, &act, &oldact);
-    puts("init down");
-}
 int main(int argc, char *argv[]){
-    init();
-
-    int http_fd = listen_port(LISTENPORT);
+    if(init(argc, argv)){
+        puts("init error\n");
+        return -1;
+    }
+    int http_fd = Listen(listenip, listenport);
     assert(http_fd >= 0);
     int epollfd = epoll_create(BUFSIZE);
     assert(epollfd >= 0);

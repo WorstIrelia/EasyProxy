@@ -13,5 +13,5 @@
 
 int hostname2ip(char * hostname);
 int connect2server(unsigned int ip, unsigned short port);
-int listen_port(unsigned short port);
+int Listen(char *listenip, unsigned short listenport);
 #endif

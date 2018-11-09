@@ -1,7 +1,8 @@
 
 #include "netlib.h"
+#define MAX_QUEUE 128
+
 int hostname2ip(char * hostname){
-    printf("hostname = %s\n", hostname);
     struct hostent *he;
     struct in_addr **addr_list;
     if((he = gethostbyname(hostname)) == NULL){
@@ -9,13 +10,12 @@ int hostname2ip(char * hostname){
     }
     addr_list = (struct in_addr **) he->h_addr_list;
     for(int i = 0; addr_list[i]; i++){
-        puts(inet_ntoa(*addr_list[i]));
         return inet_addr(inet_ntoa(*addr_list[i]));
     }
     return 0;
 }
 
-int listen_port(unsigned short port){
+int Listen(char *listenip, unsigned short listenport){
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if(fd < 0){
         return fd;
@@ -25,12 +25,12 @@ int listen_port(unsigned short port){
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr.sin_port = htons(listenport);
+    addr.sin_addr.s_addr = inet_addr(listenip);
     if(bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0){
         return -1;
     }
-    if(listen(fd, 1024) < 0){
+    if(listen(fd, MAX_QUEUE) < 0){
         return -1;
     }
     return fd;

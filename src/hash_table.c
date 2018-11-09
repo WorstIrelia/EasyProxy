@@ -118,10 +118,6 @@ static Hash_table_node *_lookup(Hash_table *hash, void *key){
     return NULL;
 }
 
-
-
-
-
 unsigned int  base_hash(void *key, int n, unsigned int mod){
     char *ptr = (char *)key;
     unsigned int res = 0;
@@ -135,17 +131,6 @@ unsigned int  base_hash(void *key, int n, unsigned int mod){
     }
     return res % mod;   
 }
-void hash_table_pri(Hash_table *hash, void (*pri)(void *key, void *value)){
-    for(int i = 0; i < hash->cap; i++){
-        Listnode *ptr = hash->list[i].head;
-        Hash_table_node *tmp = (Hash_table_node *)ptr;
-        while(ptr){
-            pri(tmp->key_value.key, tmp->key_value.value);
-            ptr = ptr->next;
-        }
-    }
-}
-
 void insert(Hash_table *hash, void *key, void *value){
     if(_lookup(hash, key)) {
         return ;

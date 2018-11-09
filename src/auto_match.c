@@ -3,7 +3,8 @@
 
 static char buf[BUFSIZE];
 extern Proxy_type proxy_type;
-
+extern char *proxyip;
+extern unsigned short proxyport;
 static void content_length(char *buf, Packet *packet, int index);
 static void extend_packet(Packet *packet);
 static void do_copy(Packet *packet, char *buf, int n);
@@ -58,7 +59,6 @@ static void content_length(char *buf, Packet *packet, int index){
                 index = 0;
         }
         packet->info.length = _atoi(packet, index);
-        // printf("%lu\n",packet->info.length);
     }
 }
 
@@ -89,11 +89,7 @@ static void do_copy(Packet *packet, char *buf, int n){
         extend_packet(packet);
     }
     while(n--){
-        // printf("%d", packet->r);
-        // putchar(*buf);
         packet->buf[packet->r++] = *buf++;
-        // putchar(packet->buf[packet->r - 1]);
-        // puts("");
         packet->size++;
         if(packet->r == packet->cap)
             packet->r = 0;
@@ -231,7 +227,6 @@ static void _get_ip_and_port(char **ptr, Packet *packet){
             }
         }
         buf[index] = 0;
-        // puts(buf);
         packet->info.port = htons(atoi(buf));
     }
     *ptr = tmp ;
@@ -262,8 +257,8 @@ static int _analyise_head(Packet *packet){
         return -1;
     }
     if(proxy_type == CLIENT2PROXY || proxy_type == PROXY2PROXY){
-        packet->info.ip = inet_addr(PROXY_IP);
-        packet->info.port = htons(PROXY_PORT);
+        packet->info.ip = inet_addr(proxyip);
+        packet->info.port = htons(proxyport);
         return 0;
     }
 
@@ -382,44 +377,6 @@ static int _auto_match_request_head(Packet *packet, char *buf, int n){
 static int _auto_match_https(Packet *packet, char *buf, int n){
     do_copy(packet, buf, n);
     return n;
-    // char *rsbuf = buf;
-    // int totn = n;
-    // if(packet->info.length == 0){
-    //     assert(packet->state < 3);
-    //     while(packet->state < 3 && n){
-    //         packet->state++;
-    //         n--;
-    //         buf++;
-    //     }
-    // }
-    // if(packet->state == 3 && n){
-    //     packet->info.length = *(unsigned char *)buf;
-    //     packet->state ++;
-    //     buf++;
-    //     n--;
-    // }
-    // if(packet->state == 4 && n){
-    //     packet->info.length = packet->info.length << 8 + *(unsigned char *)buf;
-    //     packet->state ++;
-    //     buf++;
-    //     n--;
-    // }
-    // if(packet->state == 5){
-    //     if(packet->info.length > n){
-    //         packet->info.length -= n;
-    //         buf += n;
-    //     }
-    //     else{
-    //         buf += packet->info.length;
-    //         n -= packet->info.length;
-    //         packet->info.length = 0;
-    //         packet->state = 0;
-    //         packet->com_flag = COMPLETE;
-    //         if(n){
-    //             _auto_match_https(packet, buf, n);
-    //         }
-    //     }
-    // }
 }
 
 int auto_match(Packet *packet, char *buf, int n){

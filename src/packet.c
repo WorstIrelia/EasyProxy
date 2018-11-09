@@ -10,6 +10,7 @@ static int copy_and_deal_packet(int fd, Packet *packet, char *buf, int n);
 static Packet *get_packet(int fd, int flag);
 static void _reinit_packet(Packet *packet);
 static int __send(int fd, const char *packet_buf, int n);
+static int _read(int fd, char* buf, int size);
 static void _de_code(char *buf, int n){
     for(int i = 0; i < n; i++){
         buf[i] ^= CODE;
@@ -78,20 +79,28 @@ static int _do_connect(int fd, int epollfd, Packet *packet){
     }
     return serverfd;
 }
-int read_packet(int fd, int epollfd){
-    int n = read(fd, buf, sizeof(buf));
-    printf("now == %d\n", n);
-    if(n <= 0)
+
+
+static int _read(int fd, char* buf, int size){
+    int n = read(fd, buf, size);
+    if(n <= 0){
         return n;
+    }
     if(get_fd_type(fd) & CODE){
         _de_code(buf, n);
     }
+    return n;
+}
+
+int read_packet(int fd, int epollfd){
+    int n = _read(fd, buf, sizeof(buf));
+    if(n <= 0)
+        return n;
     assert(get_fd_type(fd) != -1);
     Packet *packet = get_packet(fd, get_fd_type(fd) & SERVER);//
     if(copy_and_deal_packet(fd, packet, buf, n) < 0){
         return -1;
     }
-    printf("read = %lu\n", packet->size);
     assert(packet->size != packet->cap);
     if(packet->buf_type == HTTPS && get_fd(fd) == -1){
         int serverfd = _do_connect(fd, epollfd, packet);
@@ -114,9 +123,7 @@ int read_packet(int fd, int epollfd){
             return -1;
         }
     }
-    
     int destfd = get_fd(fd);
-    
     if((get_fd_type(destfd) & IN_EPOLL) != IN_EPOLL){
         if(packet->buf_type == HTTPS){
             assert(!epoll_add(epollfd, destfd, EPOLLIN | EPOLLOUT));
@@ -143,10 +150,6 @@ static int __send(int fd, const char *packet_buf, int n){
     return write(fd, buf, (n < BUFSIZE? n : BUFSIZE));
 }
 static int _send(int fd, Packet *packet){
-    printf("send %lu\n", packet->size);
-    printf("%d %d\n", packet->l, packet->r);
-    
-    printf("%d\n", packet->buf[packet->l]);
     assert(packet->size != packet->cap);
     int n;
     if(packet->r < packet->l){
@@ -157,7 +160,6 @@ static int _send(int fd, Packet *packet){
         packet->l += n;
         packet->size -= n;
         if(packet->l == packet->cap){
-            // assert(packet->l == packet->cap);
             packet->l = 0;
             if(packet->size){
                 int tmp = _send(fd, packet);
