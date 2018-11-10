@@ -31,4 +31,6 @@ client -> proxy -> proxy -> server
 
 然后游览器设置 本机ip 和本机开放的端口即可上网
 
+具体配置见conf中的配置文件
+
 
