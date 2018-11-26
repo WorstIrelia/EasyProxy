@@ -34,7 +34,7 @@ $(BUILD)/init.o : $(SRC)/init.c
 	$(CC) -c $(SRC)/init.c $(CFLAGS) -o $(BUILD)/init.o
 $(TARGET)/proxy : $(BUILD)/packet.o $(BUILD)/auto_match.o $(BUILD)/fd_manager.o\
 $(BUILD)/hash_table.o $(BUILD)/list.o $(BUILD)/netlib.o $(BUILD)/easy_epoll.o\
-$(BUILD)/init.o
+$(BUILD)/init.o $(SRC)/__server.c
 	$(CC) $(SRC)/__server.c  $(BUILD)/init.o $(BUILD)/auto_match.o $(BUILD)/packet.o $(BUILD)/fd_manager.o $(BUILD)/hash_table.o $(BUILD)/list.o $(BUILD)/netlib.o $(BUILD)/easy_epoll.o $(CFLAGS) -o $(TARGET)/proxy
 clean:
 	rm $(BUILD)/*.o

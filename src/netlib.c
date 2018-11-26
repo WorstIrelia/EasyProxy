@@ -1,8 +1,35 @@
 
 #include "netlib.h"
+#include "config.h"
+#include "hash_table.h"
+#include <sys/time.h>
 #define MAX_QUEUE 128
 
+static Hash_table str2ip;
+static unsigned int func_hash(void *ptr, int n, unsigned int mod){
+    char *tmp_ptr = *(char**)ptr;
+    unsigned int res = 0;
+    while(*tmp_ptr != 0){
+        res = (res << 4) + *tmp_ptr;
+        tmp_ptr++;
+    }
+    return res % mod;
+}
+static int cmp(void *lsh, void *rsh){
+    char *_lsh = *(char**)lsh;
+    char *_rsh = *(char**)rsh;
+    return !strcmp(_lsh, _rsh);
+}
 int hostname2ip(char * hostname){
+    static int flag = 0;
+    if(!flag){
+        hash_table_init(&str2ip, func_hash, cmp, sizeof(void*), sizeof(int));
+        flag = 1;
+    }
+    void *value = (void *)lookup(&str2ip, &hostname);
+    if(value){
+        return *(int*)value;
+    }
     struct hostent *he;
     struct in_addr **addr_list;
     if((he = gethostbyname(hostname)) == NULL){
@@ -10,7 +37,13 @@ int hostname2ip(char * hostname){
     }
     addr_list = (struct in_addr **) he->h_addr_list;
     for(int i = 0; addr_list[i]; i++){
-        return inet_addr(inet_ntoa(*addr_list[i]));
+        int ret = inet_addr(inet_ntoa(*addr_list[i]));
+        int len = strlen(hostname);
+        char *key = (char *)malloc(len + 1);
+        strcpy(key, hostname);
+        key[len] = 0;
+        insert(&str2ip, &key, &ret);
+        return ret;
     }
     return 0;
 }

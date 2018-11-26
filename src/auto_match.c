@@ -24,7 +24,7 @@ static func func_array[] = {content_length};
 
 int auto_match(Packet *packet, char *buf, int n);
 
-
+#ifdef DEBUG
 static void _pri(Packet *packet){
     int i = packet->l;
     while(i != packet ->r){
@@ -35,6 +35,7 @@ static void _pri(Packet *packet){
         }
     }
 }
+#endif
 
 static size_t _atoi(Packet *packet, int index){
     size_t ret = 0;
@@ -335,7 +336,9 @@ static int _auto_match_request_body(Packet *packet, char *buf, int n){
         if(packet->state == 4){
             i++;
             do_copy(packet, buf, i);
+            #ifdef DEBUG
             _pri(packet);
+            #endif
             if(_analyise_body(packet) < 0)
                 return -1;
             packet->buf_type = DATA_BODY;

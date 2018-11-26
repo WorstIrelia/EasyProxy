@@ -132,9 +132,9 @@ unsigned int  base_hash(void *key, int n, unsigned int mod){
     return res % mod;   
 }
 void insert(Hash_table *hash, void *key, void *value){
-    if(_lookup(hash, key)) {
-        return ;
-    }
+    // if(_lookup(hash, key)) {
+    //     return ;
+    // }
     _insert(hash, hash_table_node_init(key, hash->key_n, value, hash->value_n));
 }
 const void *lookup(Hash_table *hash, void *key){

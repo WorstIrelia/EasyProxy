@@ -48,11 +48,15 @@ int main(int argc, char *argv[]){
         return -1;
     }
     int http_fd = Listen(listenip, listenport);
+    // for(int i = 0; i < 6; i++){
+    //     if(!fork())
+    //         break;
+    // }
     assert(http_fd >= 0);
     int epollfd = epoll_create(BUFSIZE);
     assert(epollfd >= 0);
     epoll_add(epollfd, http_fd, EPOLLIN);
-
+    
     for(;;){
         int num = epoll_wait(epollfd, events, BUFSIZE, -1);
         for(int i = 0; i < num; i++){
@@ -60,6 +64,7 @@ int main(int argc, char *argv[]){
             int n;
             if(tmpfd == http_fd){
                 if(Accept(tmpfd, epollfd) < 0){
+                    // continue;
                     return -1;
                 }
             }

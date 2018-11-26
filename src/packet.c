@@ -4,7 +4,7 @@
 static char buf[BUFSIZE];
 extern Proxy_type proxy_type;
 
-const char *response = "HTTP/1.1 200 Connection Established\r\n\r\n";
+static const char *response = "HTTP/1.1 200 Connection Established\r\n\r\n";
 
 static int copy_and_deal_packet(int fd, Packet *packet, char *buf, int n);
 static Packet *get_packet(int fd, int flag);
@@ -97,7 +97,7 @@ int read_packet(int fd, int epollfd){
     if(n <= 0)
         return n;
     assert(get_fd_type(fd) != -1);
-    Packet *packet = get_packet(fd, get_fd_type(fd) & SERVER);//
+    Packet *packet = get_packet(fd, get_fd_type(fd) & SERVER);
     if(copy_and_deal_packet(fd, packet, buf, n) < 0){
         return -1;
     }
@@ -189,7 +189,7 @@ int send_packet(int fd, int epollfd){
     }
     assert(srcfd >= 0);
     assert(get_fd_type(srcfd) >= 0);
-    Packet *packet = get_packet(srcfd, get_fd_type(srcfd) & 0x1) ;
+    Packet *packet = get_packet(srcfd, get_fd_type(srcfd) & 0x1);
     int n;
     n = _send(fd, packet);
     if(packet->buf_type == HTTPS){
