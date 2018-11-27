@@ -6,19 +6,8 @@
 #include "fd_manager.h"
 #include "config.h"
 #include "easy_epoll.h"
+#include "http.h"
 
-
-typedef enum head_body{
-    REQUEST_HEAD,
-    REQUEST_BODY,
-    DATA_BODY,
-    HTTPS
-}Head_body;
-
-typedef enum complete{
-    COMPLETE,
-    NOT_COMPLETE
-}Complete;
 
 // typedef enum client_server_flag{
 //     CLIENT,
@@ -31,6 +20,8 @@ typedef enum packet_type{
     POST,
     CONNECT
 }Packet_type;
+
+
 
 typedef struct info{
     unsigned int ip;
@@ -51,6 +42,7 @@ typedef struct packet{
     Head_body buf_type;
     Info info;
     Complete com_flag;
+    Connection connection_state;
 }Packet;
 
 #include "auto_match.h"

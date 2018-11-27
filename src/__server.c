@@ -75,7 +75,7 @@ int main(int argc, char *argv[]){
                 } 
                 if(events[i].events & EPOLLIN){
                     n = read_packet(tmpfd, epollfd);
-                    if(n <= 0){
+                    if(n < 0){
                         connection_close(tmpfd, epollfd);
                     }
                 }

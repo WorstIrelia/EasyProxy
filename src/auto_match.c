@@ -5,7 +5,6 @@ static char buf[BUFSIZE];
 extern Proxy_type proxy_type;
 extern char *proxyip;
 extern unsigned short proxyport;
-static void content_length(char *buf, Packet *packet, int index);
 static void extend_packet(Packet *packet);
 static void do_copy(Packet *packet, char *buf, int n);
 static int _auto_match_chunk(Packet *packet, char *buf, int n);
@@ -17,9 +16,8 @@ static int _analyise_head(Packet *packet);
 static int _analyise_body(Packet *packet);
 static int _auto_match_request_body(Packet *packet, char *buf, int n);
 static int _auto_match_request_head(Packet *packet, char *buf, int n);
-static size_t _atoi(Packet *packet, int index);
 typedef void (*func)(char *, Packet *, int index);
-static func func_array[] = {content_length};
+extern func func_array[3];
 
 
 int auto_match(Packet *packet, char *buf, int n);
@@ -37,31 +35,9 @@ static void _pri(Packet *packet){
 }
 #endif
 
-static size_t _atoi(Packet *packet, int index){
-    size_t ret = 0;
-    while(packet->buf[index] != '\r'){
-        ret = ret * 10 + packet->buf[index] - 48;
-        index++;
-        if(index == packet->cap){
-            index = 0;
-        }
-    }
-    return ret;
-}
 
-static void content_length(char *buf, Packet *packet, int index){
-    if(index == packet->cap){
-        index = 0;
-    }
-    if(!strcmp(buf, "Content-Length")){
-        while(packet->buf[index] == ' ') {
-            index++;
-            if(index == packet->cap)
-                index = 0;
-        }
-        packet->info.length = _atoi(packet, index);
-    }
-}
+
+
 
 
 
@@ -98,7 +74,7 @@ static void do_copy(Packet *packet, char *buf, int n){
 }
 
 
-static int _auto_match_chunk(Packet *packet, char *buf, int n){//here
+static int _auto_match_chunk(Packet *packet, char *buf, int n){
     for(int i = 0; i < n; i++){
         if(packet->state == 2 && packet->info.chunked_size != 0){
             int left = n - i;
@@ -126,6 +102,9 @@ static int _auto_match_chunk(Packet *packet, char *buf, int n){//here
             }
         }
         else if(packet->state == 0 && buf[i] == '\r'){
+            #ifdef DEBUG
+            printf("%lu\n", packet->info.chunked_size);
+            #endif
             packet->state = 1;
         }
         else if(packet->state == 1 && buf[i] == '\n'){
@@ -181,7 +160,16 @@ static int _auto_match_data_body(Packet *packet, char *buf, int n){
         if(_auto_match_chunk(packet, buf, n) < 0){
             return -1;
         }
+        #ifdef DEBUG
+        printf("buf len = %d\n", n);
+        printf("before %lu\n", packet->size);
+        #endif
+
         do_copy(packet, buf, n);
+
+        #ifdef DEBUG
+        printf("after %lu\n", packet->size);
+        #endif
     }
     return 0;
 }
@@ -238,6 +226,10 @@ static int _analyise_head(Packet *packet){
     assert(packet->buf_type == REQUEST_HEAD);
     if(packet->client_server_flag == SERVER)
         return 0;
+
+    #ifdef ONEREQUEST
+    static int flag = 0;
+    #endif
     char type_buf[64];
     int index = 0;
     int i = packet->l;
@@ -253,6 +245,17 @@ static int _analyise_head(Packet *packet){
     if(index == 64) return -1;
     type_buf[index] = 0;
     packet->info.packet_type = get_type(type_buf);
+    #ifdef NOHTTPS
+    if(packet->info.packet_type == CONNECT){
+        return -1;
+    }
+    #endif
+    #ifdef ONEREQUEST
+    if(flag){
+        return -1;
+    }
+    flag = 1;
+    #endif
     if(packet->info.packet_type == UNKNOW){
         puts(buf);
         return -1;
@@ -306,7 +309,7 @@ static int _analyise_body(Packet *packet){
             if(i == packet->cap) i = 0;
         }
         buf[index] = 0;
-        for(int j = 0; j < sizeof(func_array)/sizeof(void*); j++){
+        for(int j = 0; func_array[j]; j++){
             func_array[j](buf, packet, ++i);
             if(i == packet->cap){
                 i = 0;

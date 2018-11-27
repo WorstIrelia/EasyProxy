@@ -5,6 +5,10 @@
 #define _CODE 0x32
 
 // #define DEBUG
+// #define NOHTTPS
+// #define ONEREQUEST
+
+
 #ifdef DEBUG
 #define TIME_BEGIN      struct timeval start,end;\
                         gettimeofday(&start, NULL);

@@ -1,11 +1,6 @@
 {
     "files.associations": {
         "auto_match.h": "c",
-        "packet.h": "c",
-        "netlib.h": "c",
-        "errno.h": "c",
-        "socket.h": "c",
-        "signal.h": "c",
         "fd_manager.h": "c"
     }
 }

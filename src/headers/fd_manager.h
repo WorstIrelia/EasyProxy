@@ -31,6 +31,8 @@ int connection_release(int serverfd, unsigned int ip, unsigned short port);
 void connection_close(int fd, int epoll_fd);
 //出错或者结束，释放一条相关的链接或者单边链接
 
+void server_close(int fd, int epoll_fd);
+
 int get_fd(int fd);
 int get_fd_type(int fd);
 

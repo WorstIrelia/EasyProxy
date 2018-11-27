@@ -57,6 +57,7 @@ void packet_init(Packet *packet, Fd_type flag){
     packet->buf_type = REQUEST_HEAD;
     packet->client_server_flag = flag;
     packet->com_flag = NOT_COMPLETE;
+    packet->connection_state = KEEP_ALIVE;
     // packet->info.chunked_size = 0;
     info_init(&packet->info);
 }
@@ -94,10 +95,21 @@ static int _read(int fd, char* buf, int size){
 
 int read_packet(int fd, int epollfd){
     int n = _read(fd, buf, sizeof(buf));
-    if(n <= 0)
+    #ifdef DEBUG
+    printf("read = %d\n", n);
+    #endif
+    if(n < 0)
         return n;
     assert(get_fd_type(fd) != -1);
     Packet *packet = get_packet(fd, get_fd_type(fd) & SERVER);
+    if(n == 0 && (get_fd_type(fd) & SERVER) == CLIENT){
+        return -1;
+    }
+    else if(n == 0){
+        epoll_del(epollfd, fd, EPOLLIN);
+        set_fd_type(fd, get_fd_type(fd) & (~IN_EPOLL));
+        return 0;
+    }
     if(copy_and_deal_packet(fd, packet, buf, n) < 0){
         return -1;
     }
@@ -152,6 +164,9 @@ static int __send(int fd, const char *packet_buf, int n){
 static int _send(int fd, Packet *packet){
     assert(packet->size != packet->cap);
     int n;
+    if(packet->connection_state == CLOSE && packet->com_flag == NOT_COMPLETE){
+        return 0;
+    }
     if(packet->r < packet->l){
         n = __send(fd, packet->buf + packet->l, packet->cap - packet->l);
         if(n < 0){
@@ -191,21 +206,36 @@ int send_packet(int fd, int epollfd){
     assert(get_fd_type(srcfd) >= 0);
     Packet *packet = get_packet(srcfd, get_fd_type(srcfd) & 0x1);
     int n;
+    #ifdef DEBUG
+    printf("now = %lu\n", packet->size);
+    #endif
     n = _send(fd, packet);
+    #ifdef DEBUG
+    
+    printf("send = %d\n", n);
+    printf("leave = %lu\n", packet->size);
+    #endif
     if(packet->buf_type == HTTPS){
         if(packet->size == 0){
             assert(!epoll_mod(epollfd, fd, EPOLLIN));
         }
     }
     else if(packet->size == 0 && packet->com_flag == COMPLETE){
-        assert(!epoll_del(epollfd, srcfd, EPOLLIN));
+        if(packet->connection_state != CLOSE){
+            assert(!epoll_del(epollfd, srcfd, EPOLLIN));
+        }
         assert(!epoll_mod(epollfd, fd, EPOLLIN));
         set_fd_type(srcfd, get_fd_type(srcfd) & (~IN_EPOLL));
-        _reinit_packet(packet);
         if(packet->buf_type != HTTPS && packet->client_server_flag == SERVER){
             Packet *clientpacket = get_packet(fd, get_fd_type(fd) & 0x1);
-            connection_release(srcfd, clientpacket->info.ip, clientpacket->info.port);
+            if(packet->connection_state == CLOSE){
+                server_close(srcfd, epollfd);
+            }
+            else{
+                connection_release(srcfd, clientpacket->info.ip, clientpacket->info.port);
+            }
         }
+        _reinit_packet(packet);
     }
     else if(packet->size == 0){
         assert(epoll_del(epollfd, fd, EPOLLOUT) == 0);
@@ -218,6 +248,7 @@ static void _reinit_packet(Packet *packet){
     if(packet->buf_type != HTTPS){
         packet->buf_type = REQUEST_HEAD;
     }
+    packet->connection_state = KEEP_ALIVE;
     packet->state = 0;
     packet->com_flag = NOT_COMPLETE;
     packet->info.length = -1;

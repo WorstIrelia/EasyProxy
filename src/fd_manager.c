@@ -64,6 +64,8 @@ static void _client_destory(int fd, int epollfd){
 }
 
 
+
+
 static void _single_close(int fd, int epoll_fd){
     assert(get_fd_type(fd) != -1);
     int type = get_fd_type(fd) & 0x1;
@@ -107,7 +109,7 @@ static void _server_destory(int fd, int epollfd){
         del_ipport_ptr(fd);
         free(ptr);
     }
-    if((get_fd_type(fd) & 0x2) == IN_EPOLL){
+    if((get_fd_type(fd) & IN_EPOLL) == IN_EPOLL){
         assert(!epoll_del(epollfd, fd, EPOLLIN | EPOLLERR));
     }
     del_fd_type(fd);
@@ -273,3 +275,10 @@ int connection_release(int serverfd, unsigned int ip, unsigned short port){
 
 
 
+void server_close(int serverfd, int epollfd){
+    int clientfd = get_fd(serverfd);
+    assert(clientfd >= 0);
+    del(&_fd2fd, &clientfd);
+    del(&_fd2fd, &serverfd);
+    _server_destory(serverfd, epollfd);
+}
