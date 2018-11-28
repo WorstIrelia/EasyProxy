@@ -18,6 +18,8 @@
 #include "packet.h"
 #include "fd_manager.h"
 #include "easy_epoll.h"
+#include "connection_manager.h"
+#include "io.h"
 static struct epoll_event events[BUFSIZE];
 
 extern Proxy_type proxy_type;

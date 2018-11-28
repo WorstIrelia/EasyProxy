@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <sys/epoll.h>
 #include <string.h>
+#include <errno.h>
 int epoll_add(int epollfd, int fd, int events);
 
 int epoll_del(int epollfd, int fd, int events);

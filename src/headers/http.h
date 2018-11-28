@@ -19,5 +19,11 @@ typedef enum connection{
     CLOSE
 }Connection;
 
+typedef enum packet_kind{
+    INIT,
+    REQUEST,
+    RESPONSE
+}Packet_kind;
+
 
 #endif

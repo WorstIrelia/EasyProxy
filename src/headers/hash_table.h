@@ -28,11 +28,15 @@ void hash_table_init(Hash_table *hash,\
 
                     
 void hash_table_destory(Hash_table *hash);
+
 unsigned int  base_hash(void *key, int n, unsigned int mod);
 
 void insert(Hash_table *hash, void *key, void *value);
+
 const void *lookup(Hash_table *hash, void *key);
+
 void del(Hash_table *hash, void *key);
+
 void change(Hash_table *hash, void *key, void *value);
 
 

@@ -59,8 +59,5 @@ static void connection_state(char *buf, Packet *packet, int index){
         if(!cmp(&packet->buf[index], "close", 5)){
             packet->connection_state = CLOSE;
         }
-        #ifdef DEBUG
-        printf("%lu\n", packet->info.length);
-        #endif
     }
 }

@@ -38,19 +38,17 @@ typedef struct packet{
     size_t size;
     int l,r;
     int state;
-    Fd_type client_server_flag;
-    Head_body buf_type;
     Info info;
+    Head_body buf_type;
     Complete com_flag;
     Connection connection_state;
+    Packet_kind packet_kind;
 }Packet;
 
 #include "auto_match.h"
-
-int read_packet(int fd, int epollfd);
-int send_packet(int fd, int epollfd);
-void packet_init(Packet *packet, Fd_type flag);
+Packet* packet_init();
 void packet_destory(void *packet);
-void info_init(Info *ptr);
-
+void packet_reinit(Packet *packet);
+void packet_request(Packet *packet);
+void packet_response(Packet *packet);
 #endif

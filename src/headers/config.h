@@ -4,7 +4,7 @@
 #define BUFSIZE 4096
 #define _CODE 0x32
 
-// #define DEBUG
+#define DEBUG
 // #define NOHTTPS
 // #define ONEREQUEST
 

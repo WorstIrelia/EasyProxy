@@ -102,9 +102,6 @@ static int _auto_match_chunk(Packet *packet, char *buf, int n){
             }
         }
         else if(packet->state == 0 && buf[i] == '\r'){
-            #ifdef DEBUG
-            printf("%lu\n", packet->info.chunked_size);
-            #endif
             packet->state = 1;
         }
         else if(packet->state == 1 && buf[i] == '\n'){
@@ -160,16 +157,7 @@ static int _auto_match_data_body(Packet *packet, char *buf, int n){
         if(_auto_match_chunk(packet, buf, n) < 0){
             return -1;
         }
-        #ifdef DEBUG
-        printf("buf len = %d\n", n);
-        printf("before %lu\n", packet->size);
-        #endif
-
         do_copy(packet, buf, n);
-
-        #ifdef DEBUG
-        printf("after %lu\n", packet->size);
-        #endif
     }
     return 0;
 }
@@ -224,7 +212,7 @@ static void _get_ip_and_port(char **ptr, Packet *packet){
 
 static int _analyise_head(Packet *packet){
     assert(packet->buf_type == REQUEST_HEAD);
-    if(packet->client_server_flag == SERVER)
+    if(packet->packet_kind == RESPONSE)
         return 0;
 
     #ifdef ONEREQUEST
@@ -257,6 +245,7 @@ static int _analyise_head(Packet *packet){
     flag = 1;
     #endif
     if(packet->info.packet_type == UNKNOW){
+        printf("packet->packet_type == ");
         puts(buf);
         return -1;
     }
