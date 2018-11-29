@@ -12,6 +12,20 @@ static int _read(int , char *, int);
 static int __send(int fd, const char *packet_buf, int n);
 static int _send(int fd, Packet *packet);
 
+
+#ifdef _LOG
+static void _pri(Packet *packet){
+    int i = packet->l;
+    while(i != packet ->r){
+        printf(RED"%c"COLOR_END, packet->buf[i]);
+        i++;
+        if(i == packet->cap){
+            i = 0;
+        }
+    }
+}
+#endif
+
 static void _de_code(char *buf, int n){
     for(int i = 0; i < n; i++){
         buf[i] ^= CODE;
@@ -24,6 +38,7 @@ static Packet *get_packet(int fd){
     if(packet == NULL){
         packet = packet_init();
         set_packet_ptr(fd, packet);
+        packet->refcnt++;
     }
     return packet;
 }
@@ -97,19 +112,39 @@ static int _send(int fd, Packet *packet){
 
 int read_packet(int fd, int epollfd){
     if(get_fd_type(fd) == -1){
+        COLOR_LOG(YELLOW, "get_fd_type == -1\n");
         return -1;
     }
     int n = _read(fd, buf, sizeof(buf));
     if(n < 0){
+        COLOR_LOG(RED, "read error\n");
+        COLOR_LOG(RED, "errno = %d\n", errno);
+        #ifdef _LOG
+        if(get_fd_type(fd) & SERVER){
+            COLOR_LOG(RED, "SERVER\n");
+        }
+        else{
+            COLOR_LOG(RED, "CLIENT\n");
+        }
+        #endif
         return n;
     }
     Packet *packet = get_packet(fd);
     if(n == 0){
         switch(get_fd_type(fd) & SERVER){
-                case CLIENT:
+            case CLIENT:
+                COLOR_LOG(YELLOW, "read == 0 and client\n");
+                #ifdef _LOG
+                if(packet->size != 0){
+                    COLOR_LOG(BLUE, "size = %lu\n", packet->size);
+                    _pri(packet);
+                }
+                #endif
                 return -1;
             case SERVER:
-                if(packet->packet_kind == REQUEST || packet->size == 0){
+                COLOR_LOG(YELLOW, "read == 0 and server\n");
+                if(packet->buf_type != HTTPS && (packet->packet_kind == REQUEST || packet->size == 0)){
+                    COLOR_LOG(YELLOW, "http, REQUEST or size == 0\n");
                     return -1;
                 }
                 assert(get_fd_type(fd) & IN_EPOLL);
@@ -135,41 +170,22 @@ int read_packet(int fd, int epollfd){
         }
         assert(get_packet_ptr(server_fd) == NULL);
         set_packet_ptr(server_fd, packet);
+        packet->refcnt++;
         packet_request(packet);
-    }
-    if(packet->buf_type == HTTPS && (proxy_type == CLIENT2SERVER || proxy_type == PROXY2SERVER)){
-        int n = __send(fd, response, strlen(response));
-        if(n < 0 || n != strlen(response)){ // 如果这几个字符都send失败，直接认为发生错误。
-            return -1;
+        if(packet->buf_type == HTTPS && (proxy_type == CLIENT2SERVER || proxy_type == PROXY2SERVER)){
+            int n = __send(fd, response, strlen(response));
+            if(n < 0 || n != strlen(response)){
+                COLOR_LOG(RED, "https response failed!!!!!!!");
+                return -1;
+            }
         }
     }
-
-
-    //------
-    // if(packet->buf_type == HTTPS && get_fd(fd) == -1){
-    //     int serverfd = _do_connect(fd, epollfd, packet);
-    //     if(serverfd < 0){
-    //         return -1;
-    //     }
-    //     Packet *serverpacket = get_packet(serverfd, SERVER);
-    //     serverpacket->buf_type = HTTPS;
-    //     if(proxy_type == CLIENT2SERVER || proxy_type == PROXY2SERVER){
-    //         int n = __send(fd, response, strlen(response));
-    //         if(n < 0 || n != strlen(response)){
-    //             return -1;
-    //         }   
-    //     }
-        
-    // }
-    // if(packet->buf_type == DATA_BODY && get_fd(fd) == -1 && (get_fd_type(fd) & SERVER) == CLIENT){
-    //     int serverfd = _do_connect(fd, epollfd, packet);
-    //     if(serverfd < 0){
-    //         return -1;
-    //     }
-    // }
-
-
     int destfd = get_fd(fd);
+    if(destfd < 0){
+        COLOR_LOG(GREEN, "read desfd < 0 %d \n", fd);
+        return destfd;
+    }
+    assert(destfd >= 0);
     if((get_fd_type(destfd) & IN_EPOLL) != IN_EPOLL){
         int ret = epoll_add(epollfd, destfd, EPOLLIN | EPOLLOUT);
         assert(!ret);
@@ -183,13 +199,20 @@ int read_packet(int fd, int epollfd){
 }
 
 int send_packet(int fd, int epollfd){
+    if(get_fd_type(fd) < 0){
+        COLOR_LOG(YELLOW, "get_fd_type == -1\n");
+        return -1;
+    }
     Packet *packet = (Packet*)get_packet_ptr(fd);
     if(packet == NULL){
+        COLOR_LOG(RED, "packet == null\n");
         return -1;
     }
     int n;
     n = _send(fd, packet);
     if(n < 0){
+        COLOR_LOG(RED, "send error\n");
+        COLOR_LOG(RED, "errno = %d\n", errno);
         return n;
     }
     if(packet->size){
@@ -198,7 +221,15 @@ int send_packet(int fd, int epollfd){
     assert((get_fd_type(fd) & IN_EPOLL) == IN_EPOLL);
     int ret = epoll_mod(epollfd, fd, EPOLLIN);
     assert(!ret);
-    if(packet->com_flag == COMPLETE){
+    if(packet->buf_type != HTTPS && packet->com_flag == COMPLETE){
+        if(get_fd(fd) < 0 && packet->packet_kind == RESPONSE){
+            assert((get_fd_type(fd) & SERVER) == CLIENT);
+            return n;
+        }
+        else if(get_fd(fd) < 0){ // why such happend 
+            COLOR_LOG(GREEN, "get_fd(fd) < 0 %d \n", fd);
+            return -1;
+        }
         assert(get_fd(fd) >= 0);
         assert(get_fd_type(get_fd(fd)) & IN_EPOLL);
         if(packet->packet_kind == REQUEST){//fd = serverfd
@@ -207,38 +238,12 @@ int send_packet(int fd, int epollfd){
             assert(!ret);
         }
         else if(packet->packet_kind == RESPONSE){// fd = clientfd
-            packet_reinit(packet);
+            
             epoll_del(epollfd, get_fd(fd), EPOLLIN);// del serverfd
+            assert(get_packet_ptr(fd) == get_packet_ptr(get_fd(fd)));
             connection_release(get_fd(fd));
+            packet_reinit(packet);
         }
     }
-    // if(packet->buf_type == HTTPS){
-    //     if(packet->size == 0){
-    //         assert(!epoll_mod(epollfd, fd, EPOLLIN));
-    //     }
-    // }
-    // else if(packet->size == 0 && packet->com_flag == COMPLETE){
-    //     if(packet->connection_state != CLOSE){
-    //         if((get_fd_type(srcfd) & IN_EPOLL) == IN_EPOLL){
-    //             assert(!epoll_del(epollfd, srcfd, EPOLLIN));
-    //         }
-    //     }
-    //     assert(!epoll_mod(epollfd, fd, EPOLLIN));
-    //     set_fd_type(srcfd, get_fd_type(srcfd) & (~IN_EPOLL));
-    //     if(packet->buf_type != HTTPS && packet->client_server_flag == SERVER){
-    //         Packet *clientpacket = get_packet(fd, get_fd_type(fd) & SERVER);
-    //         if(packet->connection_state == CLOSE || (get_fd_type(srcfd) & IN_EPOLL) != IN_EPOLL){
-    //             server_close(srcfd, epollfd);
-    //         }
-    //         else{
-    //             connection_release(srcfd, clientpacket->info.ip, clientpacket->info.port);
-    //         }
-    //     }
-    //     _reinit_packet(packet);
-    // }
-    // else if(packet->size == 0){
-    //     assert(!epoll_del(epollfd, fd, EPOLLOUT));
-    //     set_fd_type(fd, get_fd_type(fd) & (~IN_EPOLL));
-    // }
     return n;
 }

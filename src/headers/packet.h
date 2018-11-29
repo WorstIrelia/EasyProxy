@@ -38,6 +38,7 @@ typedef struct packet{
     size_t size;
     int l,r;
     int state;
+    int refcnt;
     Info info;
     Head_body buf_type;
     Complete com_flag;

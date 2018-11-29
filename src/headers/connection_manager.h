@@ -3,7 +3,8 @@
 
 #include "fd_manager.h"
 #include "packet.h"
-
+#include "config.h"
+#include "netlib.h"
 int connection_create(int fd);
 //建立一个clientfd -> serverfd的映射(fd2fd)
 //如果空闲hash链表里有，那么从里面取得fd，同时删除fd->ipport的映射和ipport->fd的这个链表元素(释放)

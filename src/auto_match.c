@@ -66,6 +66,7 @@ static void do_copy(Packet *packet, char *buf, int n){
         extend_packet(packet);
     }
     while(n--){
+        assert(packet->r < packet->cap);
         packet->buf[packet->r++] = *buf++;
         packet->size++;
         if(packet->r == packet->cap)
@@ -123,22 +124,24 @@ static int _auto_match_chunk(Packet *packet, char *buf, int n){
 }
 
 static int _auto_match_data_body(Packet *packet, char *buf, int n){
-    if(packet->info.packet_type == CONNECT){
-        packet->buf_type = HTTPS;
-        if((proxy_type == CLIENT2SERVER || proxy_type == PROXY2SERVER)){
-            packet->size = 0;
-            packet->r = packet->l;
-            assert(n == 0);
+    if(packet->packet_kind == REQUEST || packet->packet_kind == INIT){
+        if(packet->info.packet_type == CONNECT){
+            packet->buf_type = HTTPS;
+            if((proxy_type == CLIENT2SERVER || proxy_type == PROXY2SERVER)){
+                packet->size = 0;
+                packet->r = packet->l;
+                assert(n == 0);
+            }
+            return 0;
         }
-        
-        return 0;
+        if(packet->info.packet_type == GET){
+            packet->com_flag = COMPLETE;
+            return 0;
+        }
     }
-    if(packet->info.packet_type == GET){
-        packet->com_flag = COMPLETE;
-        return 0;
-    }
+    
     if(packet->info.length == 0){
-        assert(n == 0);
+        assert(n == 0);//why??
         packet->com_flag = COMPLETE;
         return 0;
     }
@@ -358,6 +361,9 @@ static int _auto_match_request_head(Packet *packet, char *buf, int n){
         if(packet->state == 2){
             i++;
             do_copy(packet, buf, i);
+            #ifdef DEBUG
+            _pri(packet);
+            #endif
             if(_analyise_head(packet) < 0)
                 return -1;
             packet->buf_type = REQUEST_BODY;

@@ -34,6 +34,7 @@ static int Accept(int fd, int epollfd){
     if(retfd < 0){
         return retfd;
     }
+    LOG("accept fd = %d\n", retfd);
     epoll_add(epollfd, retfd, EPOLLIN);
     assert(get_fd_type(retfd) == -1);
     set_fd_type(retfd, CLIENT | IN_EPOLL);
@@ -61,6 +62,7 @@ int main(int argc, char *argv[]){
     
     for(;;){
         int num = epoll_wait(epollfd, events, BUFSIZE, -1);
+        // COLOR_LOG(PURPLE, "deal begin\n");
         for(int i = 0; i < num; i++){
             int tmpfd = events[i].data.fd;
             int n;
@@ -71,19 +73,29 @@ int main(int argc, char *argv[]){
                 }
             }
             else {
-                if(events[i].events & EPOLLERR){
-                    connection_close(tmpfd, epollfd);
-                    continue;
-                } 
+                // if(events[i].events & EPOLLERR){
+                //     COLOR_LOG(RED, "connection_close ERROR %d\n", tmpfd);
+                //     #ifdef _LOG
+                //     int status;
+                //     socklen_t slen;
+                //     getsockopt(tmpfd, SOL_SOCKET, SO_ERROR, (void *) &status, &slen);
+                //     COLOR_LOG(RED, "errno = %d\n", status);
+                //     #endif
+                //     connection_close(tmpfd, epollfd);
+                //     continue;
+                // } 
                 if(events[i].events & EPOLLIN){
                     n = read_packet(tmpfd, epollfd);
                     if(n < 0){
+                        COLOR_LOG(RED, "connection_close READ %d\n", tmpfd);
                         connection_close(tmpfd, epollfd);
                     }
                 }
                 if(events[i].events & EPOLLOUT){
                     n = send_packet(tmpfd, epollfd);
                     if(n < 0){
+                        
+                        COLOR_LOG(RED, "connection_close WRITE %d\n", tmpfd);
                         connection_close(tmpfd, epollfd);
                     }
                 }
@@ -91,6 +103,7 @@ int main(int argc, char *argv[]){
             }
             
         }
+        // COLOR_LOG(PURPLE, "deal down\n");
     }
 
 

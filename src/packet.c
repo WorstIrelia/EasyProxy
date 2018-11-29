@@ -15,12 +15,17 @@ Packet* packet_init(){
     packet->buf = (char*)malloc(BUFSIZE);
     assert(packet->buf);
     packet->cap = BUFSIZE;
+    packet->refcnt = 0;
     packet_reinit(packet);
     return packet;
 }
-void packet_destory(void *packet){
-    free(((Packet *)packet)->buf);
-    free(packet);
+void packet_destory(void *ptr){
+    Packet* packet = (Packet *)ptr;
+    packet->refcnt--;
+    if(!packet->refcnt){
+        free(((Packet *)packet)->buf);
+        free(packet);
+    }   
 }
 
 void packet_request(Packet *packet){
@@ -39,6 +44,7 @@ void packet_response(Packet *packet){
 }
 
 void packet_reinit(Packet *packet){
+    
     packet->l = packet->r = 0;
     packet->size = 0;
     packet->state = 0;

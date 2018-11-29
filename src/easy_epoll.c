@@ -28,7 +28,6 @@ int epoll_mod(int epollfd, int fd, int events){
     ev.data.fd = fd;
     ev.events = events;
     if(epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev) < 0){
-        printf("%d\n", errno);
         return -1;
     }
     return 0;

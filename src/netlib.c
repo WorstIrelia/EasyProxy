@@ -3,6 +3,8 @@
 #include "config.h"
 #include "hash_table.h"
 #include <sys/time.h>
+
+
 #define MAX_QUEUE 128
 
 static Hash_table str2ip;
@@ -67,6 +69,13 @@ int Listen(char *listenip, unsigned short listenport){
         return -1;
     }
     return fd;
+}
+
+int test_connection(int fd){
+    struct tcp_info info;
+    int len = sizeof(info);
+    getsockopt(fd, IPPROTO_TCP, TCP_INFO, &info, (socklen_t *)&len);
+    return info.tcpi_state == TCP_ESTABLISHED;
 }
 
 int connect2server(unsigned int ip, unsigned short port){
