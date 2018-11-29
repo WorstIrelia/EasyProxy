@@ -130,6 +130,30 @@ int read_packet(int fd, int epollfd){
         return n;
     }
     Packet *packet = get_packet(fd);
+    if((get_fd_type(fd) & SERVER) == SERVER){
+        if(packet->packet_kind == REQUEST){
+            if(packet->size != 0){
+                COLOR_LOG(PURPLE, "here %d\n", fd);
+            }
+            // assert(packet->size == 0);
+            if(packet->buf_type == HTTPS){
+                packet->packet_kind = RESPONSE;
+            }
+        }
+    }
+    else{
+        if(packet->packet_kind == INIT){
+            assert(packet->size == 0);
+        }
+        else if(packet->packet_kind == RESPONSE){
+            if(packet->size != 0){
+                COLOR_LOG(PURPLE, "here %d\n", fd);
+            }
+            if(packet->buf_type == HTTPS){
+                packet->packet_kind = REQUEST;
+            }
+        }
+    }
     if(n == 0){
         switch(get_fd_type(fd) & SERVER){
             case CLIENT:
@@ -154,7 +178,6 @@ int read_packet(int fd, int epollfd){
                 return 0;
         }
     }
-    
     if(auto_match(packet, buf, n) < 0){
         return -1;
     }
