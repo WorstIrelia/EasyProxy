@@ -5,6 +5,7 @@
 #include "packet.h"
 #include "config.h"
 #include "netlib.h"
+#include "connection_pool.h"
 int connection_create(int fd);
 int connection_release(int serverfd);
 void connection_close(int fd, int epollfd);

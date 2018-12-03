@@ -85,6 +85,7 @@ int main(int argc, char *argv[]){
                 //     continue;
                 // } 
                 if(events[i].events & EPOLLIN){
+                    // LOG("read fd %d = tmpfd\n", tmpfd);
                     n = read_packet(tmpfd, epollfd);
                     if(n < 0){
                         COLOR_LOG(RED, "connection_close READ %d\n", tmpfd);
@@ -92,6 +93,7 @@ int main(int argc, char *argv[]){
                     }
                 }
                 if(events[i].events & EPOLLOUT){
+                    // LOG("send fd %d = tmpfd\n", tmpfd);
                     n = send_packet(tmpfd, epollfd);
                     if(n < 0){
                         

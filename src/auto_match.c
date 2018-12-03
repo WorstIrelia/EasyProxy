@@ -1,11 +1,12 @@
 #include "auto_match.h"
 
 
+#define PACKET2REALBUF(packet) ((char *)((packet)->buf[(packet)->now_use].buf))
+#define PACKET2BUF(packet) ((packet)->buf[packet->now_use])
 static char buf[BUFSIZE];
 extern Proxy_type proxy_type;
 extern char *proxyip;
 extern unsigned short proxyport;
-static void extend_packet(Packet *packet);
 static void do_copy(Packet *packet, char *buf, int n);
 static int _auto_match_chunk(Packet *packet, char *buf, int n);
 static int _auto_match_data_body(Packet *packet, char *buf, int n);
@@ -22,56 +23,20 @@ extern func func_array[3];
 
 int auto_match(Packet *packet, char *buf, int n);
 
+
 #ifdef DEBUG
-static void _pri(Packet *packet){
-    int i = packet->l;
-    while(i != packet ->r){
-        putchar(packet->buf[i]);
-        i++;
-        if(i == packet->cap){
-            i = 0;
-        }
+static void _pri(Packet *packet, int type){
+    int i = packet->buf[type].l;
+    while(i != packet->buf[type].r){
+        printf(RED"%c"COLOR_END, packet->buf[type].buf[i]);
+        BUF_ADD_INDEX(&packet->buf[type], i);
     }
 }
 #endif
 
 
-
-
-
-
-
-static void extend_packet(Packet *packet){
-    int tmpcap = packet->cap << 1;
-    char *tmpbuf = (char*)malloc(tmpcap);
-    char *ptr = tmpbuf;
-    assert(tmpbuf);
-    while(packet->l != packet->r){
-        *ptr++ = packet->buf[packet->l++];
-        if(packet->l == packet->cap){
-            packet->l = 0;
-        }
-    }
-    
-    free(packet->buf);
-    packet->buf = tmpbuf;
-    packet->l = 0;
-    packet->r = packet->size;
-    packet->cap = tmpcap;
-}
-
 static void do_copy(Packet *packet, char *buf, int n){
-    int left = packet->cap - packet->size - 1;
-    if(left < n){
-        extend_packet(packet);
-    }
-    while(n--){
-        assert(packet->r < packet->cap);
-        packet->buf[packet->r++] = *buf++;
-        packet->size++;
-        if(packet->r == packet->cap)
-            packet->r = 0;
-    }
+    buf_copy(&PACKET2BUF(packet), buf, n);
 }
 
 
@@ -128,8 +93,8 @@ static int _auto_match_data_body(Packet *packet, char *buf, int n){
         if(packet->info.packet_type == CONNECT){
             packet->buf_type = HTTPS;
             if((proxy_type == CLIENT2SERVER || proxy_type == PROXY2SERVER)){
-                packet->size = 0;
-                packet->r = packet->l;
+                PACKET2BUF(packet).size = 0;
+                PACKET2BUF(packet).r = PACKET2BUF(packet).l;
                 assert(n == 0);
             }
             return 0;
@@ -141,7 +106,14 @@ static int _auto_match_data_body(Packet *packet, char *buf, int n){
     }
     
     if(packet->info.length == 0){
-        assert(n == 0);//why??
+        if(n != 0){
+            COLOR_LOG(RED, "n == %d\n", n);
+            for(int i = 0; i < n; i++){
+                COLOR_LOG(RED, "%02X ", (unsigned char)buf[i]);
+            }
+            puts("");
+        }
+        assert(n >= 0);//why?? 目前看到iqiyi qipashuo里 会多发一个字节， 很奇怪。。\r\n\r\n\n
         packet->com_flag = COMPLETE;
         return 0;
     }
@@ -180,15 +152,15 @@ static void _get_ip_and_port(char **ptr, Packet *packet){
     char *tmp = *ptr;
     // http://
     if(packet->info.packet_type != CONNECT) tmp += 7;
-    if(tmp > packet->buf + packet->cap){
-        tmp = tmp - packet->cap;
+    if(tmp > PACKET2REALBUF(packet)+ PACKET2BUF(packet).cap){
+        tmp = tmp - PACKET2BUF(packet).cap;
     }
     char buf[BUFSIZE];
     int index = 0;
     while(*tmp != '/' && *tmp != ':') {
         buf[index++] = *tmp++;
-        if(tmp == packet->buf + packet->cap){
-            tmp = packet->buf;
+        if(tmp == PACKET2REALBUF(packet)+ PACKET2BUF(packet).cap){
+            tmp = PACKET2REALBUF(packet);
         }
     }
     buf[index] = 0;
@@ -202,8 +174,8 @@ static void _get_ip_and_port(char **ptr, Packet *packet){
         tmp++;
         while(*tmp != '/' && *tmp != ' ') {
             buf[index++] = *tmp++;
-            if(tmp == packet->buf + packet->cap){
-                tmp = packet->buf;
+            if(tmp == PACKET2REALBUF(packet)+ PACKET2BUF(packet).cap){
+                tmp = PACKET2REALBUF(packet);
             }
         }
         buf[index] = 0;
@@ -223,14 +195,14 @@ static int _analyise_head(Packet *packet){
     #endif
     char type_buf[64];
     int index = 0;
-    int i = packet->l;
-    while(index < 64 && packet->buf[i] != ' '){
-        type_buf[index++] = packet->buf[i++];
-        if(i == packet->cap)
+    int i = PACKET2BUF(packet).l;
+    while(index < 64 && PACKET2REALBUF(packet)[i] != ' '){
+        type_buf[index++] = PACKET2REALBUF(packet)[i++];
+        if(i == PACKET2BUF(packet).cap)
             i = 0;
     }
     i++;
-    if(i == packet->cap){
+    if(i == PACKET2BUF(packet).cap){
         i = 0;
     }
     if(index == 64) return -1;
@@ -258,58 +230,58 @@ static int _analyise_head(Packet *packet){
         return 0;
     }
 
-    char *ptr = packet->buf + i;
+    char *ptr = PACKET2REALBUF(packet)+ i;
     _get_ip_and_port(&ptr, packet);
     if(packet->info.ip == 0 || packet->info.port == 0)
         return -1;
-    char *lsh = packet->buf + i;
-    while(ptr != packet->buf + packet->r){
+    char *lsh = PACKET2REALBUF(packet)+ i;
+    while(ptr != PACKET2REALBUF(packet)+ PACKET2BUF(packet).r){
         *lsh++ = *ptr++;
-        if(ptr == packet->buf + packet->cap){
-            ptr = packet->buf;
+        if(ptr == PACKET2REALBUF(packet)+ PACKET2BUF(packet).cap){
+            ptr = PACKET2REALBUF(packet);
         }
-        if(lsh == packet->buf + packet->cap){
-            lsh = packet->buf;
+        if(lsh == PACKET2REALBUF(packet)+ PACKET2BUF(packet).cap){
+            lsh = PACKET2REALBUF(packet);
         }
     }
-    packet->r = lsh - packet->buf;
-    packet->size = packet->r < packet->l? packet->r + packet->cap - packet->l:packet->r - packet->l;
+    PACKET2BUF(packet).r = lsh - PACKET2REALBUF(packet);
+    PACKET2BUF(packet).size = PACKET2BUF(packet).r < PACKET2BUF(packet).l? PACKET2BUF(packet).r + PACKET2BUF(packet).cap - PACKET2BUF(packet).l:PACKET2BUF(packet).r - PACKET2BUF(packet).l;
     return 0;
 }
 
 static int _analyise_body(Packet *packet){
     assert(packet->buf_type == REQUEST_BODY);
-    int i = packet->l;
-    while(i != packet->r && packet->buf[i] != '\n') {
+    int i = PACKET2BUF(packet).l;
+    while(i != PACKET2BUF(packet).r && PACKET2REALBUF(packet)[i] != '\n') {
         i++;
-        if(i == packet->cap){
+        if(i == PACKET2BUF(packet).cap){
             i = 0;
         }
     }
-    if(i == packet->r){
+    if(i == PACKET2BUF(packet).r){
         return -1;
     }
-    for(; i != packet->r; ){
+    for(; i != PACKET2BUF(packet).r; ){
         i++;
-        if(i == packet->cap) i = 0;
-        if(packet->buf[i] == '\r' && packet->buf[i + 1 == packet->cap? 0 : i + 1] == '\n'){
+        if(i == PACKET2BUF(packet).cap) i = 0;
+        if(PACKET2REALBUF(packet)[i] == '\r' && PACKET2REALBUF(packet)[i + 1 == PACKET2BUF(packet).cap? 0 : i + 1] == '\n'){
             break;
         }
         int index = 0;
-        while(i != packet->r && packet->buf[i] != ':'){
-            buf[index++] = packet->buf[i++];
-            if(i == packet->cap) i = 0;
+        while(i != PACKET2BUF(packet).r && PACKET2REALBUF(packet)[i] != ':'){
+            buf[index++] = PACKET2REALBUF(packet)[i++];
+            if(i == PACKET2BUF(packet).cap) i = 0;
         }
         buf[index] = 0;
         for(int j = 0; func_array[j]; j++){
             func_array[j](buf, packet, ++i);
-            if(i == packet->cap){
+            if(i == PACKET2BUF(packet).cap){
                 i = 0;
             }
         }
-        while(i != packet->r && packet->buf[i] != '\n'){
+        while(i != PACKET2BUF(packet).r && PACKET2REALBUF(packet)[i] != '\n'){
             i++;
-            if(i == packet->cap) i = 0;
+            if(i == PACKET2BUF(packet).cap) i = 0;
         }
         
     }
@@ -332,7 +304,8 @@ static int _auto_match_request_body(Packet *packet, char *buf, int n){
             i++;
             do_copy(packet, buf, i);
             #ifdef DEBUG
-            _pri(packet);
+            COLOR_LOG(RED, "_auto_match_request_body\n");
+            _pri(packet, packet->now_use);
             #endif
             if(_analyise_body(packet) < 0)
                 return -1;
@@ -362,7 +335,8 @@ static int _auto_match_request_head(Packet *packet, char *buf, int n){
             i++;
             do_copy(packet, buf, i);
             #ifdef DEBUG
-            _pri(packet);
+            COLOR_LOG(RED, "_auto_match_request_head\n");
+            _pri(packet, packet->now_use);
             #endif
             if(_analyise_head(packet) < 0)
                 return -1;

@@ -15,10 +15,15 @@ all :	$(BUILD)/netlib.o\
 	$(BUILD)/http.o\
 	$(BUILD)/io.o\
 	$(BUILD)/connection_manager.o\
+	$(BUILD)/buf.o\
+	$(BUILD)/connection_pool.o\
 	$(TARGET)/proxy
 	echo build finished
 $(BUILD)/io.o : $(SRC)/io.c $(INC)/io.h
 	$(CC) -c $(SRC)/io.c $(CFLAGS) -o $(BUILD)/io.o
+$(BUILD)/buf.o : $(SRC)/buf.c $(INC)/buf.h
+	$(CC) -c $(SRC)/buf.c $(CFLAGS) -o $(BUILD)/buf.o
+
 $(BUILD)/connection_manager.o : $(SRC)/connection_manager.c $(INC)/connection_manager.h
 	$(CC) -c $(SRC)/connection_manager.c $(CFLAGS) -o $(BUILD)/connection_manager.o
 $(BUILD)/easy_epoll.o : $(SRC)/easy_epoll.c $(INC)/easy_epoll.h
@@ -29,6 +34,8 @@ $(BUILD)/list.o : $(SRC)/list.c $(INC)/list.h
 	$(CC) -c $(SRC)/list.c $(CFLAGS) -o $(BUILD)/list.o
 $(BUILD)/hash_table.o : $(SRC)/hash_table.c $(INC)/hash_table.h $(INC)/list.h 
 	$(CC) -c $(SRC)/hash_table.c $(CFLAGS) -o $(BUILD)/hash_table.o
+$(BUILD)/connection_pool.o : $(SRC)/connection_pool.c $(INC)/connection_pool.h
+	$(CC) -c $(SRC)/connection_pool.c $(CFLAGS) -o $(BUILD)/connection_pool.o
 $(BUILD)/fd_manager.o : $(SRC)/fd_manager.c $(INC)/fd_manager.h $(INC)/hash_table.h \
 			$(INC)/list.h $(INC)/netlib.h
 	$(CC) -c $(SRC)/fd_manager.c $(CFLAGS) -o $(BUILD)/fd_manager.o
@@ -40,10 +47,10 @@ $(BUILD)/init.o : $(SRC)/init.c
 	$(CC) -c $(SRC)/init.c $(CFLAGS) -o $(BUILD)/init.o
 $(BUILD)/http.o : $(SRC)/http.c
 	$(CC) -c $(SRC)/http.c $(CFLAGS) -o $(BUILD)/http.o
-$(TARGET)/proxy : $(BUILD)/connection_manager.o $(BUILD)/io.o $(BUILD)/packet.o $(BUILD)/auto_match.o $(BUILD)/fd_manager.o\
+$(TARGET)/proxy : $(BUILD)/connection_manager.o $(BUILD)/io.o $(BUILD)/packet.o $(BUILD)/auto_match.o $(BUILD)/fd_manager.o $(BUILD)/connection_pool.o \
 $(BUILD)/hash_table.o $(BUILD)/list.o $(BUILD)/netlib.o $(BUILD)/easy_epoll.o\
-$(BUILD)/init.o $(BUILD)/http.o $(SRC)/__server.c $(INC)/config.h
-	$(CC) $(SRC)/__server.c  $(BUILD)/init.o $(BUILD)/io.o $(BUILD)/connection_manager.o $(BUILD)/auto_match.o $(BUILD)/packet.o $(BUILD)/fd_manager.o $(BUILD)/http.o $(BUILD)/hash_table.o $(BUILD)/list.o $(BUILD)/netlib.o $(BUILD)/easy_epoll.o $(CFLAGS) -o $(TARGET)/proxy
+$(BUILD)/init.o $(BUILD)/http.o $(BUILD)/buf.o $(SRC)/__server.c $(INC)/config.h
+	$(CC) $(SRC)/__server.c  $(BUILD)/init.o $(BUILD)/io.o $(BUILD)/connection_manager.o $(BUILD)/connection_pool.o $(BUILD)/auto_match.o $(BUILD)/packet.o $(BUILD)/fd_manager.o $(BUILD)/http.o $(BUILD)/hash_table.o $(BUILD)/list.o $(BUILD)/buf.o $(BUILD)/netlib.o $(BUILD)/easy_epoll.o $(CFLAGS) -o $(TARGET)/proxy
 clean: 
 	rm -f $(BUILD)/*.o
 	rm -f $(TARGET)/*

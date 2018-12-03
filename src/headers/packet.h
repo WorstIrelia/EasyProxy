@@ -7,7 +7,7 @@
 #include "config.h"
 #include "easy_epoll.h"
 #include "http.h"
-
+#include "buf.h"
 
 // typedef enum client_server_flag{
 //     CLIENT,
@@ -33,22 +33,20 @@ typedef struct info{
 
 
 typedef struct packet{
-    char *buf;
-    size_t cap;
-    size_t size;
-    int l,r;
+    Buf buf[2];
     int state;
     int refcnt;
     Info info;
     Head_body buf_type;
     Complete com_flag;
-    Connection connection_state;
+    Connection connection_state;//no use
     Packet_kind packet_kind;
+    int now_use;
 }Packet;
 
 #include "auto_match.h"
 Packet* packet_init();
-void packet_destory(void *packet);
+void packet_destory(void *ptr, int type);
 void packet_reinit(Packet *packet);
 void packet_request(Packet *packet);
 void packet_response(Packet *packet);

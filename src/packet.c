@@ -12,18 +12,21 @@ static void _info_init(Info *ptr);
 Packet* packet_init(){
     Packet *packet = (Packet *)malloc(sizeof(Packet));
     assert(packet);
-    packet->buf = (char*)malloc(BUFSIZE);
-    assert(packet->buf);
-    packet->cap = BUFSIZE;
+    //packet->buf = (char*)malloc(BUFSIZE);
+    //assert(packet->buf);
+    buf_init(&packet->buf[SERVER]);
+    buf_init(&packet->buf[CLIENT]);
+    // packet->cap = BUFSIZE;
     packet->refcnt = 0;
     packet_reinit(packet);
     return packet;
 }
-void packet_destory(void *ptr){
+void packet_destory(void *ptr, int type){
     Packet* packet = (Packet *)ptr;
     packet->refcnt--;
     if(!packet->refcnt){
-        free(((Packet *)packet)->buf);
+        buf_destory(&packet->buf[SERVER]);
+        buf_destory(&packet->buf[CLIENT]);
         free(packet);
     }   
 }
@@ -45,8 +48,8 @@ void packet_response(Packet *packet){
 
 void packet_reinit(Packet *packet){
     
-    packet->l = packet->r = 0;
-    packet->size = 0;
+    buf_clear(&packet->buf[SERVER]);
+    buf_clear(&packet->buf[CLIENT]);
     packet->state = 0;
     packet->buf_type = REQUEST_HEAD;
     packet->packet_kind = INIT;

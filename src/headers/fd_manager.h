@@ -14,7 +14,9 @@ typedef enum fd_type{
     IN_EPOLL =      0X02,
     NOT_IN_EPOLL =  0X00,
     CODE =          0X04,
-    NOTCODE =       0X00
+    NOTCODE =       0X00,
+    IN_POOL =       0x08,
+    NOT_IN_POOL =   0x00
 }Fd_type;
 
 void fd_manager_init();

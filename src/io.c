@@ -13,18 +13,6 @@ static int __send(int fd, const char *packet_buf, int n);
 static int _send(int fd, Packet *packet);
 
 
-#ifdef _LOG
-static void _pri(Packet *packet){
-    int i = packet->l;
-    while(i != packet ->r){
-        printf(RED"%c"COLOR_END, packet->buf[i]);
-        i++;
-        if(i == packet->cap){
-            i = 0;
-        }
-    }
-}
-#endif
 
 static void _de_code(char *buf, int n){
     for(int i = 0; i < n; i++){
@@ -49,7 +37,13 @@ static int _do_connect(int fd, int epollfd, Packet *packet){
     int server_fd = connection_create(fd);
     if(server_fd < 0){
         return -1;
-    } 
+    }
+    if(get_fd_type(server_fd) >= 0){
+        if(get_fd_type(server_fd) & IN_EPOLL){
+            epoll_del(epollfd, server_fd, EPOLLIN);
+        }
+        del_fd_type(server_fd);
+    }
     assert(get_fd_type(server_fd) == -1);
     set_fd_type(server_fd, SERVER);
     if(proxy_type == CLIENT2PROXY || proxy_type == PROXY2PROXY){
@@ -79,18 +73,18 @@ static int __send(int fd, const char *packet_buf, int n){
     return write(fd, buf, (n < BUFSIZE? n : BUFSIZE));
 }
 static int _send(int fd, Packet *packet){
-    assert(packet->size != packet->cap);
+    int type = (get_fd_type(fd) & SERVER) ^ 1;
     int n;
-    if(packet->r < packet->l){
-        n = __send(fd, packet->buf + packet->l, packet->cap - packet->l);
+    if(packet->buf[type].r < packet->buf[type].l){
+        n = __send(fd, packet->buf[type].buf + packet->buf[type].l, packet->buf[type].cap - packet->buf[type].l);
         if(n < 0){
             return n;
         }
-        packet->l += n;
-        packet->size -= n;
-        if(packet->l == packet->cap){
-            packet->l = 0;
-            if(packet->size){
+        packet->buf[type].l += n;
+        packet->buf[type].size -= n;
+        if(packet->buf[type].l == packet->buf[type].cap){
+            packet->buf[type].l = 0;
+            if(packet->buf[type].size){
                 int tmp = _send(fd, packet);
                 if(tmp < 0){
                     return tmp;
@@ -100,12 +94,12 @@ static int _send(int fd, Packet *packet){
         }
     }
     else{
-        n = __send(fd, packet->buf + packet->l, packet->r - packet->l);
+        n = __send(fd, packet->buf[type].buf + packet->buf[type].l, packet->buf[type].r - packet->buf[type].l);
         if(n < 0){
             return n;
         }
-        packet->l += n;
-        packet->size -= n;
+        packet->buf[type].l += n;
+        packet->buf[type].size -= n;
     }
     return n;
 }
@@ -115,7 +109,7 @@ int read_packet(int fd, int epollfd){
         COLOR_LOG(YELLOW, "get_fd_type == -1\n");
         return -1;
     }
-    int n = _read(fd, buf, sizeof(buf));
+    int n = _read(fd, buf, sizeof(buf));//modified
     if(n < 0){
         COLOR_LOG(RED, "read error\n");
         COLOR_LOG(RED, "errno = %d\n", errno);
@@ -130,58 +124,46 @@ int read_packet(int fd, int epollfd){
         return n;
     }
     Packet *packet = get_packet(fd);
-    if((get_fd_type(fd) & SERVER) == SERVER){
-        if(packet->packet_kind == REQUEST){
-            if(packet->size != 0){
-                COLOR_LOG(PURPLE, "here %d\n", fd);
-            }
-            // assert(packet->size == 0);
-            if(packet->buf_type == HTTPS){
-                packet->packet_kind = RESPONSE;
-            }
-        }
-    }
-    else{
-        if(packet->packet_kind == INIT){
-            assert(packet->size == 0);
-        }
-        else if(packet->packet_kind == RESPONSE){
-            if(packet->size != 0){
-                COLOR_LOG(PURPLE, "here %d\n", fd);
-            }
-            if(packet->buf_type == HTTPS){
-                packet->packet_kind = REQUEST;
-            }
-        }
-    }
+    packet->now_use = get_fd_type(fd) & SERVER;
     if(n == 0){
         switch(get_fd_type(fd) & SERVER){
             case CLIENT:
                 COLOR_LOG(YELLOW, "read == 0 and client\n");
                 #ifdef _LOG
-                if(packet->size != 0){
-                    COLOR_LOG(BLUE, "size = %lu\n", packet->size);
-                    _pri(packet);
+                if(packet->buf[SERVER].size != 0 || packet->buf[CLIENT].size != 0){
+                    COLOR_LOG(BLUE, "s2c size = %lu c2s size = %lu\n", packet->buf[SERVER].size, packet->buf[CLIENT].size);
+                    // _pri(packet, get_fd_type(fd) & SERVER);
                 }
                 #endif
                 return -1;
             case SERVER:
                 COLOR_LOG(YELLOW, "read == 0 and server\n");
-                if(packet->buf_type != HTTPS && (packet->packet_kind == REQUEST || packet->size == 0)){
+                if(packet->buf_type == HTTPS){
+                    return -1;
+                }
+                else if(get_fd_type(fd) & IN_POOL){
+                    COLOR_LOG(RED, "del_pool!\n");
+                    del_pool(fd);
+                    set_fd_type(fd, get_fd_type(fd) & ~IN_POOL);
+                }
+                else if(packet->buf_type != HTTPS && (packet->packet_kind == REQUEST || packet->com_flag == NOT_COMPLETE)){
                     COLOR_LOG(YELLOW, "http, REQUEST or size == 0\n");
                     return -1;
                 }
                 assert(get_fd_type(fd) & IN_EPOLL);
-                epoll_del(epollfd, fd, EPOLLIN);
-                set_fd_type(fd, get_fd_type(fd) & (~IN_EPOLL));
                 server_close(fd, epollfd);
                 return 0;
         }
     }
+    int destfd = get_fd(fd);
+    if(destfd < 0){ // server调用server_close释放掉，但是buf[SERVER]里必没有数据(因为现在在读取)，现在destfd == -1 再次收到请求
+        COLOR_LOG(GREEN, "read desfd < 0 %d \n", fd);
+        assert(packet->buf[SERVER].size == 0);
+        packet_reinit(packet);
+    }
     if(auto_match(packet, buf, n) < 0){
         return -1;
     }
-    assert(packet->size != packet->cap);
     if(packet->packet_kind == INIT){
         if(packet->buf_type == REQUEST_HEAD){
             return n;
@@ -203,11 +185,7 @@ int read_packet(int fd, int epollfd){
             }
         }
     }
-    int destfd = get_fd(fd);
-    if(destfd < 0){
-        COLOR_LOG(GREEN, "read desfd < 0 %d \n", fd);
-        return destfd;
-    }
+    destfd = get_fd(fd);
     assert(destfd >= 0);
     if((get_fd_type(destfd) & IN_EPOLL) != IN_EPOLL){
         int ret = epoll_add(epollfd, destfd, EPOLLIN | EPOLLOUT);
@@ -227,18 +205,20 @@ int send_packet(int fd, int epollfd){
         return -1;
     }
     Packet *packet = (Packet*)get_packet_ptr(fd);
+    packet->now_use = get_fd_type(fd) & SERVER;
     if(packet == NULL){
         COLOR_LOG(RED, "packet == null\n");
         return -1;
     }
     int n;
+    int type = (get_fd_type(fd) & SERVER) ^ 1 ;
     n = _send(fd, packet);
     if(n < 0){
         COLOR_LOG(RED, "send error\n");
         COLOR_LOG(RED, "errno = %d\n", errno);
         return n;
     }
-    if(packet->size){
+    if(packet->buf[type].size){
         return n;
     }
     assert((get_fd_type(fd) & IN_EPOLL) == IN_EPOLL);
@@ -262,7 +242,7 @@ int send_packet(int fd, int epollfd){
         }
         else if(packet->packet_kind == RESPONSE){// fd = clientfd
             
-            epoll_del(epollfd, get_fd(fd), EPOLLIN);// del serverfd
+            // epoll_del(epollfd, get_fd(fd), EPOLLIN);// del serverfd // 在链接池里收到了 n == 0
             assert(get_packet_ptr(fd) == get_packet_ptr(get_fd(fd)));
             connection_release(get_fd(fd));
             packet_reinit(packet);

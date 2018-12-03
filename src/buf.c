@@ -17,7 +17,7 @@ void buf_extend(Buf *buf){
     int l = 0;
     for(;buf->l != buf->r;){
         tmp[l++] = buf->buf[buf->l];
-        buf_add_index(buf, buf->l);
+        BUF_ADD_INDEX(buf, buf->l);
     }
     free(buf->buf);
     buf->buf = tmp;
@@ -28,12 +28,18 @@ void buf_extend(Buf *buf){
 
 void buf_copy(Buf *dest_buf, char *src_buf, size_t size){
     int left = dest_buf->cap - dest_buf->size - 1;
-    while(left < dest_buf->size){
+    while(left < size){
         buf_extend(dest_buf);
+        left = dest_buf->cap - dest_buf->size - 1;
     }
     int l = 0;
     while(size--){
         dest_buf->buf[dest_buf->r] = src_buf[l++];
-        add_buf_index(dest_buf->r);
+        BUF_ADD_INDEX(dest_buf, dest_buf->r);
+        dest_buf->size++;
     }
+}
+
+void buf_clear(Buf *buf){
+    buf->size = buf->l = buf->r = 0;
 }

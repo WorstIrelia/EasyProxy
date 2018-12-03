@@ -3,6 +3,9 @@
 
 #include "config.h"
 #include "sys/types.h"
+#include "stdlib.h"
+#include "stdio.h"
+#include <assert.h>
 #define BUF_ADD_INDEX(buf, i) i++;if(i == (buf)->cap){i = 0;}
 
 typedef struct buf{
@@ -20,5 +23,6 @@ void buf_extend(Buf *buf);
 
 void buf_copy(Buf *dest_buf, char *src_buf, size_t size);
 
+void buf_clear(Buf *buf);
 
 #endif
